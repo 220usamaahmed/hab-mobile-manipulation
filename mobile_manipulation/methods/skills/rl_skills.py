@@ -230,6 +230,7 @@ class SetMarkerRLSkill(RLSkill):
     def act(self, obs, **kwargs):
         if not self._has_set and self._get_gripper_distance(obs) > 0.3:
             self._has_set = True
+
         return super().act(obs, **kwargs)
 
     def _get_gripper_distance(self, obs):

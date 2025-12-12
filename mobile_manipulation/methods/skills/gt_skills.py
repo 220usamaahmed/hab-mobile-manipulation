@@ -133,6 +133,7 @@ class NavGTSkill(Skill):
 
 @my_registry.register_skill
 class ResetArm(Skill):
+
     def reset(self, obs, **kwargs):
         super().reset(obs, **kwargs)
         sim: RearrangeSim = self._rl_env.habitat_env.sim
@@ -144,8 +145,16 @@ class ResetArm(Skill):
         arm_tgt_qpos = sim.pyb_robot.IK(self.ee_tgt_pos, max_iters=100)
         cur_qpos = np.array(self._robot.arm_joint_pos)
         tgt_qpos = np.array(arm_tgt_qpos)
-        n_step = np.ceil(np.max(np.abs(tgt_qpos - cur_qpos)) / 0.1)
+       # print("difference in qpos == " , np.abs(tgt_qpos - cur_qpos))
+        n_step = np.ceil(np.max(np.abs(tgt_qpos - cur_qpos)) / 0.025)
         n_step = max(1, int(n_step))
+    #    print("num steps == " , n_step)
+    #    print("cur_qpos == " , cur_qpos)
+    #    print("tgt_qpos == " , tgt_qpos)
+     #   print("difference in qpos == " , np.array(tgt_qpos - cur_qpos))
+     #   print("incerement per step == " , np.array((tgt_qpos - cur_qpos)/n_step))
+        self.incremental_qpos_act= np.array(((tgt_qpos - cur_qpos)/n_step)/0.025)
+        
         self.plan = np.linspace(cur_qpos, tgt_qpos, n_step)
         self._plan_idx = 0
 
@@ -159,9 +168,13 @@ class ResetArm(Skill):
             task_actions[action_name].ee_tgt_pos = self.ee_tgt_pos
 
     def act(self, obs, **kwargs):
+       # print("before qpos == " , np.array(self._robot.arm_joint_pos))
         self._robot.arm_motor_pos = self.plan[self._plan_idx]
+       # print("self._robot.arm_motor_pos == " , self._robot.arm_motor_pos)
         self._plan_idx += 1
         self._elapsed_steps += 1
+       # print("after qpos == " , np.array(self._robot.arm_joint_pos))
+       # input()
         return {"action": "EmptyAction"}
 
     def should_terminate(self, obs, **kwargs):

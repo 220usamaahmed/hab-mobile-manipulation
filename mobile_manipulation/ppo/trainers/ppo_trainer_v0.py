@@ -42,7 +42,7 @@ from mobile_manipulation.utils.env_utils import (
     make_env_fn,
 )
 from mobile_manipulation.utils.wrappers import HabitatActionWrapper
-
+from habitat_extensions.utils.viewer import OpenCVViewer
 
 @baseline_registry.register_trainer(name="ppo-v0")
 class PPOTrainerV0(BaseTrainer):
@@ -109,11 +109,15 @@ class PPOTrainerV0(BaseTrainer):
 
             # Checkpoint
             if self.should_checkpoint():
+
                 self.count_checkpoints += 1
                 self.prev_ckpt_step = self.num_steps_done
                 self.save(ckpt_id=self.count_checkpoints)
             if self.should_checkpoint2():
-                self.save(ckpt_id=-1)
+                self.count_checkpoints += 1
+                self.prev_ckpt_step = self.num_steps_done
+                self.save(ckpt_id=self.count_checkpoints)
+
 
             if ppo_cfg.use_linear_lr_decay:
                 lr_scheduler.step()
@@ -658,10 +662,13 @@ class PPOTrainerV0(BaseTrainer):
 
         if self.config.EVAL.CKPT_PATH:
             ckpt_path = self.config.EVAL.CKPT_PATH
+
         else:
             ckpt_path = get_latest_checkpoint(
                 self.config.CHECKPOINT_FOLDER, True
             )
+
+
         assert os.path.isfile(ckpt_path), ckpt_path
         ckpt_id = get_checkpoint_id(ckpt_path)
         if ckpt_id is None:
@@ -681,6 +688,7 @@ class PPOTrainerV0(BaseTrainer):
     ) -> None:
         # Map location CPU is almost always better than mapping to a CUDA device.
         logger.info(f"Loaded {checkpoint_path}")
+      #  checkpoint_path='/home/shokry/hab-mobile-manipulation/data/results/rearrange/skills/tidy_house/ckpt.10.pth'
         ckpt_dict = torch.load(checkpoint_path, map_location="cpu")
 
         config = self.config.clone()
@@ -713,6 +721,11 @@ class PPOTrainerV0(BaseTrainer):
         all_episode_stats = []
         rgb_frames = []
         failure_episodes = []
+        
+        show_viewer=True
+        if show_viewer:
+            viewer = OpenCVViewer(config.TASK_CONFIG.TASK.TYPE)
+
 
         # Initialize policy inputs
         obs = env.reset()
@@ -742,7 +755,7 @@ class PPOTrainerV0(BaseTrainer):
         )
 
         metrics = {}
-
+        current_step=0
         pbar = tqdm.tqdm(total=num_eval_episodes)
         while len(all_episode_stats) < num_eval_episodes:
             if len(config.VIDEO_OPTION) > 0:
@@ -758,10 +771,25 @@ class PPOTrainerV0(BaseTrainer):
             # step_action = {"action": actions[0].cpu().numpy()}
             step_action = actions[0].cpu().numpy()
             obs, reward, done, info = env.step(step_action)
+            current_step+=1
+
             current_episode_reward += reward
             metrics = self._extract_scalars_from_info(info)
+            
+            if show_viewer:
+                frame = env.render(
+                            "human",
+                            info=metrics,
+                            overlay_info=False,
+                            show_info=True,
+                        )
+                        
+                key = viewer.imshow(
+                        frame[..., :3],delay=1,
+                    )
+               # input()
 
-            if done:
+            if done or current_step==200:
                 episode_stats = metrics.copy()
                 episode_stats["return"] = current_episode_reward
                 all_episode_stats.append(episode_stats)
@@ -788,6 +816,7 @@ class PPOTrainerV0(BaseTrainer):
                     )
 
                 obs = env.reset()
+                current_step=0
                 metrics = {}
                 current_episode_reward = 0
                 rgb_frames = []

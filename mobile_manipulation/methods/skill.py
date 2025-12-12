@@ -70,6 +70,7 @@ class CompositeSkill(Skill):
         self._rl_env = rl_env
 
         self.skill_sequence = config.get("SKILL_SEQUENCE", config.SKILLS)
+
         self.skills = self._init_entities(
             entity_names=config.SKILLS,
             register_func=my_registry.get_skill,
@@ -92,6 +93,7 @@ class CompositeSkill(Skill):
                 entity_type is not None
             ), f"invalid {entity_name} type {entity_cfg.TYPE}"
             entities[entity_name] = entity_type(config=entity_cfg, **kwargs)
+
         return entities
 
     @property
@@ -116,8 +118,11 @@ class CompositeSkill(Skill):
         self.current_skill.reset(obs, **kwargs)
 
     def act(self, obs, **kwargs):
+
+        
         if self.current_skill.should_terminate(obs, **kwargs):
             print("Skill <{}> terminate.".format(self.current_skill_name))
+                
             self.set_skill_idx(None)
             if self.current_skill is not None:
                 print("Skill <{}> begin.".format(self.current_skill_name))
