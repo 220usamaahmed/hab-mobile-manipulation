@@ -65,7 +65,7 @@ TASK:
     END_EPISODE: True
   RearrangePickSuccess:
     TYPE: RearrangePickSuccess
-    THRESHOLD: 0.05
+    THRESHOLD: 0.01
   RearrangePickReward:
     TYPE: RearrangePickReward
     DIST_REWARD: 4.0

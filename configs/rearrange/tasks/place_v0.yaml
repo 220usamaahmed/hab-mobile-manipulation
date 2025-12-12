@@ -67,7 +67,7 @@ TASK:
     THRESHOLD: 0.15
   RearrangePlaceSuccess:
     TYPE: RearrangePlaceSuccess
-    THRESHOLD: 0.05
+    THRESHOLD: 0.01
   RearrangePlaceReward:
     TYPE: RearrangePlaceRewardV1
     DIST_REWARD: 4.0

@@ -1,7 +1,7 @@
 __BASE__: "{fileDirname}/base.yaml"
 
 SOLUTION:
-
+  PickAndPlace:
     PickRLSkill:
       TYPE: PickRLSkill
       ACTION: BaseArmGripperAction2

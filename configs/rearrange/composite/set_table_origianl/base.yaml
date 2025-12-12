@@ -3,7 +3,7 @@ BASE_RUN_DIR: "data/results/rearrange/composite/set_table/{fileName}"
 BASE_TASK_CONFIG_PATH: "configs/rearrange/tasks/composite/set_table.yaml"
 
 RL:
-  SUCCESS_MEASURE: "stage_success.place_0"
+  SUCCESS_MEASURE: "stage_success.close_1"
   END_ON_SUCCESS: False
 
 SOLUTION:
@@ -31,8 +31,30 @@ SOLUTION:
     - ResetArm
     - PlaceRLSkill
     - ResetArm
+    - NavRLSkill
+    - ResetArm
+    - CloseDrawerRLSkill
+    - ResetArm
 
+    - NextTarget
 
+    # fridge
+    - NavRLSkill
+    - ResetArm
+    - OpenFridgeRLSkill
+    - ResetArm
+    - NavRLSkill
+    - ResetArm
+    - PickFrRLSkill
+    - ResetArm
+    - NavRLSkill
+    - ResetArm
+    - PlaceRLSkill
+    - ResetArm
+    - NavRLSkill
+    - ResetArm
+    - CloseFridgeRLSkill
+    - ResetArm
 
   ResetArm:
     TYPE: ResetArm
