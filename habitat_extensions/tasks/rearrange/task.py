@@ -16,6 +16,7 @@ from habitat.core.utils import not_none_validator
 
 from .sim import RearrangeSim
 
+import inspect
 
 @attr.s(auto_attribs=True, kw_only=True)
 class RearrangeEpisode(Episode):
@@ -87,6 +88,27 @@ class RearrangeTask(EmbodiedTask):
     # should be called for force termination only
     _should_terminate: bool
 
+    # added by me         
+    def initialize_to_given_pose(self, episode: RearrangeEpisode , start_state=None,qpos=None):
+
+        if self._config.get("FRIDGE_INIT", False):
+            self._sim.set_fridge_state_by_motor(2.356)
+
+
+        self._sim.robot.base_pos = start_state[0]
+        self._sim.robot.base_ori = start_state[1]
+        self._sim.robot.arm_joint_pos = qpos
+        self._sim.robot.arm_motor_pos = qpos
+        self._sim.internal_step_by_time(0.1)
+     
+    def set_target(self, index):
+        self.tgt_idx = index
+        self.tgt_obj, self.tgt_T = self._sim.get_target(self.tgt_idx)
+        self.pick_goal = self.obj_start_pos[self.tgt_obj.handle]
+        self.place_goal = np.array(self.tgt_T.translation, dtype=np.float32)
+        # self.nav_goal_pick = compute_start_state(self._sim, self.pick_goal)
+        # self.nav_goal_place = compute_start_state(self._sim, self.place_goal)
+
     def overwrite_sim_config(self, sim_config, episode: RearrangeEpisode):
         sim_config.defrost()
         sim_config.SCENE = episode.scene_id
@@ -137,7 +159,21 @@ class RearrangeTask(EmbodiedTask):
         self._target_receptacles = episode.target_receptacles
         self._goal_receptacles = episode.goal_receptacles
 
-        self.initialize(episode)
+        self.initialize(episode) # this function is found in the file habitat_extensions/tasks/rearrange/composite_tasks.py
+        self._reset_stats()
+
+        for action_instance in self.actions.values():
+            action_instance.reset(episode=episode, task=self)
+        return self._get_observations(episode)
+        
+    # added by me to reset the agent to a given position  
+    def reset_to_given_pose(self, episode: RearrangeEpisode, start_state=None,qpos=None):
+        self._sim.reset()
+        self._target_receptacles = episode.target_receptacles
+        self._goal_receptacles = episode.goal_receptacles
+
+        self.initialize_to_given_pose(episode, start_state=start_state,qpos=qpos) ## this function is found in the file habitat_extensions/tasks/rearrange/composite_tasks.py
+
         self._reset_stats()
 
         for action_instance in self.actions.values():
@@ -159,7 +195,8 @@ class RearrangeTask(EmbodiedTask):
         )
 
         # The noise can not be too large (e.g. 0.05)
-        ee_noise = self._config.get("EE_NOISE", 0.025)
+        # ee_noise = self._config.get("EE_NOISE", 0.025)*2
+        ee_noise = self._config.get("EE_NOISE", 0.025)*1.5
         if ee_noise > 0:
             noise = self.np_random.normal(0, ee_noise, [3])
             noise = np.clip(noise, -ee_noise * 2, ee_noise * 2)

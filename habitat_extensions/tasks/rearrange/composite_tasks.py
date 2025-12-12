@@ -27,6 +27,27 @@ class TidyHouseTask(RearrangeTask):
             )
         self._sim.robot.base_pos = start_state[0]
         self._sim.robot.base_ori = start_state[1]
+
+        self._sim.internal_step_by_time(0.1)
+
+        # Cache start positions
+        self.obj_start_pos = self._sim.get_rigid_objs_pos_dict()
+        tgt_idx = self._config.get("TARGET_INDEX", 0)
+        # print("tgt_idx in == " , tgt_idx)
+        if tgt_idx == -1:    
+            tgt_idx = self.np_random.choice(len(self._sim.targets))
+        self.set_target(tgt_idx)
+        
+    # added by me         
+    def initialize_to_given_pose(self, episode: RearrangeEpisode , start_state=None):
+
+        if self._config.get("FRIDGE_INIT", False):
+            self._sim.set_fridge_state_by_motor(2.356)
+
+
+        self._sim.robot.base_pos = start_state[0]
+        self._sim.robot.base_ori = start_state[1]
+
         self._sim.internal_step_by_time(0.1)
 
         # Cache start positions

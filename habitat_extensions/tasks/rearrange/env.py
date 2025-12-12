@@ -19,7 +19,7 @@ from .task import RearrangeTask
 from . import actions, sensors
 from . import sub_tasks, composite_tasks, composite_sensors
 from .sensors import GripperStatus
-
+import inspect
 
 @baseline_registry.register_env(name="RearrangeRLEnv-v0")
 class RearrangeRLEnv(RLEnv):

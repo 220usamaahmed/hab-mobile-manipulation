@@ -109,6 +109,11 @@ class MagicGraspAction(AtomicAction):
             return
 
     def _step(self, gripper_action, *args, **kwargs):
+    
+       # print("in magic grasp step ")
+       # input()
+    #    print("gripper action == ", gripper_action)
+     #   input()
         if gripper_action > 0.0:
             self._sim.robot.open_gripper()
         elif gripper_action < 0.0:
@@ -192,9 +197,11 @@ class ArmEEAction(AtomicAction):
         # self.ee_tgt_pos = self._sim.pyb_robot.ee_state[4]
 
     def _step(self, ee_rel_pos, **kwargs):
+
         ee_rel_pos = np.clip(ee_rel_pos, -1.0, 1.0)
         ee_rel_pos *= self._config.CTRL_SCALE
-
+      #  print(" ee rel pos == " , ee_rel_pos)
+       # input()
         self._sim.sync_pyb_robot()
         ee_tgt_pos = self.ee_tgt_pos + ee_rel_pos
         # clip to workspace
@@ -230,6 +237,7 @@ class ArmRelPosAction(AtomicAction):
         return spaces.Box(shape=(n_qpos,), low=-1, high=1, dtype=np.float32)
 
     def _step(self, delta_qpos, *args, **kwargs):
+
         delta_qpos = np.clip(delta_qpos, -1, 1) * self._config.CTRL_SCALE
         tgt_qpos = self._sim.robot.arm_motor_pos + delta_qpos
         self._sim.robot.arm_motor_pos = tgt_qpos
@@ -277,13 +285,11 @@ class BaseVelAction(AtomicAction):
         if self._config.get("DISABLE_BACKWARD", False):
             lin_vel = lin_vel * 0.5 + 0.5
 
-        # I manually added the scale
-        lin_vel = lin_vel * 1.5 # self._config.LIN_SCALE
-        # print("self._config.LIN_SCALE == ", self._config.LIN_SCALE)
-        ang_vel = ang_vel *  1.5 # self._config.ANG_SCALE
-        # print("self._config.ANG_SCALE == ", self._config.ANG_SCALE)
-        ################
-        
+        lin_vel = lin_vel * self._config.LIN_SCALE
+     #   print("self._config.LIN_SCALE == ", self._config.LIN_SCALE)
+        ang_vel = ang_vel * self._config.ANG_SCALE
+      #  print("self._config.ANG_SCALE == ", self._config.ANG_SCALE)
+       # input()
         self.lin_vel=lin_vel
         self.ang_vel=ang_vel
         return lin_vel, ang_vel
@@ -295,13 +301,15 @@ class BaseVelAction(AtomicAction):
             - Stop when velocity is small
             - Revert robot pose if it collides with other objects.
         """
-        # lin_vel, ang_vel = self.preprocess_velocity(velocity)
-        lin_vel, ang_vel=velocity
+        lin_vel, ang_vel = self.preprocess_velocity(velocity)
+        print("in base velocity action step")
+        print("action == " , lin_vel, ang_vel)
+        input()
         # x-axis is forward and y-axis is up.
         self.vel_ctrl.linear_velocity = mn.Vector3(lin_vel, 0, 0)
         self.vel_ctrl.angular_velocity = mn.Vector3(0, ang_vel, 0)
-        self.lin_vel = lin_vel
-        self.ang_vel = ang_vel
+        self.lin_vel=lin_vel
+        self.ang_vel=ang_vel
         # Compute current and target base transformation
         base_T = self._robot.base_T
         rigid_state = habitat_sim.RigidState(
@@ -329,6 +337,8 @@ class BaseVelAction(AtomicAction):
             grapsed_obj_T = grasped_obj.transformation
             rel_T = target_T @ base_T.inverted()
             grasped_obj.transformation = rel_T @ grapsed_obj_T
+            
+        
 
     def get_action_args(self, action: np.ndarray):
         return {"velocity": action}
@@ -346,6 +356,8 @@ class BaseDiscVelAction(BaseVelAction):
             ]
         )
         self.is_stop_called_steps=0
+        
+
 
     @property
     def action_space(self):
@@ -358,15 +370,16 @@ class BaseDiscVelAction(BaseVelAction):
     def _step(self, action: int, *args, task: RearrangeTask, **kwargs):
         assert isinstance(action, int), action
         velocity = self.possible_velocities[action]
-        # print("velocity", velocity, action)
+       # print("velocity in actions file", velocity, action)
 
         if np.allclose(velocity, 0):
-            self.is_stop_called = True  # this parameter ends the episode when the target is achieved
+            self.is_stop_called = True  ### this parameter ends the episode when the target is achieved
             self.is_stop_called_steps+=1
+            
         else:
             self.is_stop_called = False
 
-        if self._config.get("END_ON_STOP", True) and self.is_stop_called and self.is_stop_called_steps>2:
+        if self._config.get("END_ON_STOP", True) and self.is_stop_called and self.is_stop_called_steps>30:
             task._should_terminate = True
 
             self.is_stop_called_steps=0
@@ -400,10 +413,14 @@ class BaseVelStopAction(BaseVelAction):
 class BaseArmGripperAction(SimulatorTaskAction):
     def __init__(self, *args, config, sim, **kwargs) -> None:
         super().__init__(config=config, sim=sim, **kwargs)
+        
         base_action_init = registry.get_task_action(config.BASE_ACTION.TYPE)
         self.base_action = base_action_init(config=config.BASE_ACTION, sim=sim)
+        print("config == " , config.BASE_ACTION,)
+       # input()
         arm_action_init = registry.get_task_action(config.ARM_ACTION.TYPE)
         self.arm_action = arm_action_init(config=config.ARM_ACTION, sim=sim)
+
         gripper_action_init = registry.get_task_action(
             config.GRIPPER_ACTION.TYPE
         )
@@ -411,9 +428,13 @@ class BaseArmGripperAction(SimulatorTaskAction):
             config=config.GRIPPER_ACTION, sim=sim
         )
         
+        
+        
         self.lin_vel=0
         self.ang_vel=0
-       
+       # print("in basearmaction")
+        #input()
+
     def reset(self, *args, **kwargs) -> None:
         self.base_action.reset(*args, **kwargs)
         self.arm_action.reset(*args, **kwargs)
@@ -433,5 +454,9 @@ class BaseArmGripperAction(SimulatorTaskAction):
         # The order might matter!
         self.gripper_action._step(gripper_action, **kwargs)
         self.arm_action._step(arm_action, **kwargs)
+
+      #  print("Arm action == " , arm_action)
+       # input()
+        print("base action in step == " , base_action)
         self.base_action._step(base_action, **kwargs)
         return self._sim.step(None)

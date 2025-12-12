@@ -31,15 +31,15 @@ class RearrangeNavTask(RearrangeTask):
         if "TARGET_INDEX" in self._config:
             tgt_indices = [self._config.TARGET_INDEX]
         else:
-            tgt_indices = self.np_random.permutation(n_targets)
+            tgt_indices = self.np_random.permutation(n_targets)  # the config file doesn't have target indicies
 
         for tgt_idx in tgt_indices:
+            self.target_index=tgt_idx
             self._set_target(tgt_idx)
             supported_tasks = self._get_supported_tasks()
             supported_tasks = self.np_random.permutation(
                 supported_tasks
             ).tolist()
-
             # Decide pick goal before initializing subtask and receptacle
             self.pick_goal = np.array(
                 self.tgt_obj.translation, dtype=np.float32

@@ -137,8 +137,9 @@ class RearrangePickReward(MyMeasure):
             reward += dist_reward
             self.prev_dist_to_goal = gripper_to_resting_dist
         elif gripper_status == GripperStatus.HOLDING_WRONG:
-            raise RuntimeError()
-            # pass
+            # raise RuntimeError()
+            # print("hold the wrong object")
+            pass
         elif gripper_status == GripperStatus.DROP:
             reward -= self._config.DROP_PENALTY
             task._is_episode_active = False
