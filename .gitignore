@@ -34,3 +34,17 @@ imgui.ini
 
 # Project
 data
+
+collected_trajectories
+!collected_trajectories/.gitkeep
+
+# Temporary (for refactoring)
+configs_backup
+# configs/methods
+# configs/pddl
+# configs/tasks
+
+habitat_extensions_backup
+habitat_extensions/tasks_original
+
+mobile_manipulation_backup
