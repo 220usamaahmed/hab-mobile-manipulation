@@ -550,7 +550,7 @@ def main():
             current_episode_dict["rewards"]=rewards_ep_transformer
             current_episode_dict["masks"]=masks_ep_transformer
             current_episode_dict["infos"]=infos_ep_transformer
-            torch.save(current_episode_dict ,  f"/home/user/siddiquieu1/HRL-Shokry/ahmed/hab-mobile-manipulation/collected_dataset_transformer/tidy_house/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
+            torch.save(current_episode_dict ,  f"/home/user/siddiquieu1/HRL-Usama/mobile-manipulation/hab-mobile-manipulation/collected_trajectories/tidy_house/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
         #    input()
         if args.save_video == "all" or (
             args.save_video == "failure" and is_failure
