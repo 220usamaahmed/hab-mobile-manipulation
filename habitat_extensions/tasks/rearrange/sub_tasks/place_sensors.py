@@ -29,23 +29,13 @@ class RearrangePlaceSuccess(MyMeasure):
         self.update_metric(*args, task=task, **kwargs)
 
     def update_metric(self, *args, task: RearrangeTask, **kwargs):
-
         measures = task.measurements.measures
         dist = measures[GripperToRestingDistance.cls_uuid].get_metric()
         place_success = measures[PlaceObjectSuccess.cls_uuid].get_metric()
-
         rest_success = (
             not self._sim.gripper.is_grasped and dist <= self._config.THRESHOLD
         )
-        #print("self._config.THRESHOLD == ", self._config.THRESHOLD)
-        #input()
-      #  print("place_success == " , place_success)
-      #  print("reset success == " , dist <= self._config.THRESHOLD*2)
-      #  print("success == " , rest_success and place_success)
-        
         self._metric = rest_success and place_success
-
-
 
 
 # -------------------------------------------------------------------------- #
