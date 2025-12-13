@@ -35,8 +35,11 @@ imgui.ini
 # Project
 data
 
-collected_trajectories
-!collected_trajectories/.gitkeep
+# Ignore everything under collected_trajectories
+collected_trajectories/*
+!collected_trajectories/tidy_house/
+collected_trajectories/tidy_house/*
+!collected_trajectories/tidy_house/.gitkeep
 
 # Temporary (for refactoring)
 configs_backup
