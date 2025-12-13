@@ -194,7 +194,7 @@ def main():
     if Transformer_policy:
         # Typical training checkpoint that already stored config + state_dict
         loader = SkillTransformerPolicyLoader.from_checkpoint(
-            ckpt_path="/home/user/siddiquieu1/HRL-Shokry/ahmed/skill_transformer/check_points/tidy_house/ckpt.74.pth",
+            ckpt_path="../skill_transformer/check_points/tidy_house/ckpt.74.pth",
             device="cuda",  # or "cpu"
             strict=False,  # be forgiving across minor code/config changes
             strip_prefix="module.",  # remove DDP prefix if present

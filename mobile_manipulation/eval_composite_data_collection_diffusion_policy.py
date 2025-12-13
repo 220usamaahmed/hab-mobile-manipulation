@@ -31,7 +31,6 @@ import sys
 import pickle
 
 
-
 def preprocess_config(config_path: str, config: Config):
     config.defrost()
 
@@ -208,29 +207,23 @@ def main():
     if args.viewer:
         viewer = OpenCVViewer(config.TASK_CONFIG.TASK.TYPE)
 
+    robot_head_depth_temp = np.array([])
+    rob_qpos_temp = np.array([])
+    rel_resting_pos_temp = np.array([])
+    rel_pick_pos_ee_temp = np.array([])
+    rel_place_pos_ee_temp = np.array([])
+    rel_pick_pos_base_temp = np.array([])
+    rel_place_pos_base_temp = np.array([])
+    is_holding_temp = np.array([])
+    action_to_save_temp = np.array([])
 
+    dataset_dict = {}
+    episode_ids = []
 
-
-
-
-    robot_head_depth_temp=np.array([])
-    rob_qpos_temp=np.array([])
-    rel_resting_pos_temp=np.array([])
-    rel_pick_pos_ee_temp=np.array([])
-    rel_place_pos_ee_temp=np.array([])
-    rel_pick_pos_base_temp=np.array([])
-    rel_place_pos_base_temp=np.array([])
-    is_holding_temp=np.array([])
-    action_to_save_temp=np.array([])
-
-    dataset_dict={}
-    episode_ids=[]
-
-
-    number_of_episodes=0
-    num_suc_episodes=0
-    total_steps=0
-    saves=0
+    number_of_episodes = 0
+    num_suc_episodes = 0
+    total_steps = 0
+    saves = 0
     for i_ep in range(num_episodes):
         ob = env.reset()
         initial_robot_pos = env.env._env._sim.robot.base_pos
@@ -242,24 +235,20 @@ def main():
         episode_id = env.current_episode.episode_id
         scene_id = env.current_episode.scene_id
 
-        
-        #print("current episode == " , env.current_episode.target_receptacles[0][1])
-
+        # print("current episode == " , env.current_episode.target_receptacles[0][1])
 
         # Skip episode and keep reproducibility
         if eval_episode_ids is not None and episode_id not in eval_episode_ids:
             print("Skip episode", episode_id)
             continue
 
+        obs_ep_transformer = []
+        actions_ep_transformer = []
+        rewards_ep_transformer = []
+        masks_ep_transformer = []
+        infos_ep_transformer = []
 
-        obs_ep_transformer=[]
-        actions_ep_transformer=[]
-        rewards_ep_transformer=[]
-        masks_ep_transformer=[]
-        infos_ep_transformer=[]
-
-
-        number_of_steps=0
+        number_of_steps = 0
         while True:
             step_action = policy.act(ob)
             if step_action is None:
@@ -302,125 +291,187 @@ def main():
                     step_action = play_action
             # -------------------------------------------------------------------------- #
 
-
-
-
             #######################################################
             #############   Data collection code  #################
             ## This data is collected before action execution ##
 
-            robot_base_pos= env.env._env._sim.robot.base_pos
-            robot_base_orientation= env.env._env._sim.robot.base_ori
-            robot_qpos= env.env._env._sim.robot.arm_joint_pos 	
-           # robot_ee_T= env.env._env._sim.robot.ee_T 	
-            robot_ee_pos=env.env._env._sim.robot.gripper_T.translation
-        
-            gripper_is_grasped= env.env._env._sim.gripper.is_grasped 	
+            robot_base_pos = env.env._env._sim.robot.base_pos
+            robot_base_orientation = env.env._env._sim.robot.base_ori
+            robot_qpos = env.env._env._sim.robot.arm_joint_pos
+            # robot_ee_T= env.env._env._sim.robot.ee_T
+            robot_ee_pos = env.env._env._sim.robot.gripper_T.translation
+
+            gripper_is_grasped = env.env._env._sim.gripper.is_grasped
             if gripper_is_grasped:
-            	grasped=1
+                grasped = 1
             else:
-            	grasped=-1
+                grasped = -1
 
-
-            pick_goal=   env.env._env._task.pick_goal    
-            place_goal=   env.env._env._task.place_goal 
-            resting_pos=env.env._env._task.resting_position   
-
+            pick_goal = env.env._env._task.pick_goal
+            place_goal = env.env._env._task.place_goal
+            resting_pos = env.env._env._task.resting_position
 
             ## rgb and depth images has the format (W,H,C) where C is the number of channels
             ## You will need to use permute function to change it to (C,W,H) to be compatible with pytorch
-            robot_head_rgb = ob['robot_head_rgb']
-            robot_arm_rgb = ob['robot_arm_rgb']
-            robot_head_depth = ob['robot_head_depth']
-            robot_arm_depth = ob['robot_arm_depth']
+            robot_head_rgb = ob["robot_head_rgb"]
+            robot_arm_rgb = ob["robot_arm_rgb"]
+            robot_head_depth = ob["robot_head_depth"]
+            robot_arm_depth = ob["robot_arm_depth"]
 
             robot_transform = env.env._env._sim.robot.base_T
-            robot_ee_transform=env.env._env._sim.robot.gripper_T
-            local_ee_pos_relative_to_base=robot_transform.inverted().transform_point(robot_ee_pos)
-          #  abs_ee_pos = env.env._env._sim.robot.ee_transform.translation
-            relative_pick_pos_base = robot_transform.inverted().transform_point(pick_goal)
-            relative_pick_pos_base_polar=cartesian_to_polar(relative_pick_pos_base[0], relative_pick_pos_base[2])
-            relative_pick_pos_ee=robot_ee_transform.inverted().transform_point(pick_goal)
+            robot_ee_transform = env.env._env._sim.robot.gripper_T
+            local_ee_pos_relative_to_base = (
+                robot_transform.inverted().transform_point(robot_ee_pos)
+            )
+            #  abs_ee_pos = env.env._env._sim.robot.ee_transform.translation
+            relative_pick_pos_base = (
+                robot_transform.inverted().transform_point(pick_goal)
+            )
+            relative_pick_pos_base_polar = cartesian_to_polar(
+                relative_pick_pos_base[0], relative_pick_pos_base[2]
+            )
+            relative_pick_pos_ee = (
+                robot_ee_transform.inverted().transform_point(pick_goal)
+            )
 
-            relative_place_pos_base = robot_transform.inverted().transform_point(place_goal)
-            relative_place_pos_base_polar=cartesian_to_polar(relative_place_pos_base[0], relative_place_pos_base[2])
-            relative_place_pos_ee = robot_ee_transform.inverted().transform_point(place_goal)
+            relative_place_pos_base = (
+                robot_transform.inverted().transform_point(place_goal)
+            )
+            relative_place_pos_base_polar = cartesian_to_polar(
+                relative_place_pos_base[0], relative_place_pos_base[2]
+            )
+            relative_place_pos_ee = (
+                robot_ee_transform.inverted().transform_point(place_goal)
+            )
 
-
-            current_task_name= policy.current_skill_name
-            if step_action['action']=='EmptyAction' and current_task_name!="ResetArm":
-                action_to_save = np.zeros((1,10))
-            elif step_action['action']=='EmptyAction' and current_task_name=="ResetArm":
-                action_to_save = np.zeros((1,10))
+            current_task_name = policy.current_skill_name
+            if (
+                step_action["action"] == "EmptyAction"
+                and current_task_name != "ResetArm"
+            ):
+                action_to_save = np.zeros((1, 10))
+            elif (
+                step_action["action"] == "EmptyAction"
+                and current_task_name == "ResetArm"
+            ):
+                action_to_save = np.zeros((1, 10))
                 if gripper_is_grasped:
-                    action_to_save[0][9]=1
+                    action_to_save[0][9] = 1
                 else:
-                    action_to_save[0][9]=-1
-                action_to_save[0][2:9]=policy.current_skill.incremental_qpos_act  
-                action_to_save[0][0:2]=np.array([0.0,0.0])
+                    action_to_save[0][9] = -1
+                action_to_save[0][
+                    2:9
+                ] = policy.current_skill.incremental_qpos_act
+                action_to_save[0][0:2] = np.array([0.0, 0.0])
 
-            elif step_action['action']=='BaseArmGripperAction2':
+            elif step_action["action"] == "BaseArmGripperAction2":
                 ## for the BaseArmGripperAction2 the velocity of the base is multiplied by 1.5 (not 3 as in baseDiscVelAction)
-                action_to_save=np.array([step_action['action_args']])
-                action_to_save[0,0:2]*=1.5
-               # print("actions to save shape for pick task == ", action_to_save.shape)
+                action_to_save = np.array([step_action["action_args"]])
+                action_to_save[0, 0:2] *= 1.5
+            # print("actions to save shape for pick task == ", action_to_save.shape)
 
-            elif step_action['action']=='BaseDiscVelAction':
+            elif step_action["action"] == "BaseDiscVelAction":
                 ## baseDiscVelAction has 20 discrete actions, and the policy is categorical distribution over these 20 actions
                 ## then the discrete action is mapped to a continuous velocity command between -1 and 1
                 ## then the continuous velocity command is multiplied by 3 to get the actual velocity command sent to the robot
-                discrete_nav_action=step_action['action_args']                                  
+                discrete_nav_action = step_action["action_args"]
                 possible_velocities = np.array(
-                [
-                    [lin_vel, ang_vel]
-                    for lin_vel in np.linspace(-0.5, 1.0, 4)
-                    for ang_vel in np.linspace(-1.0, 1.0, 5)
-                ]
+                    [
+                        [lin_vel, ang_vel]
+                        for lin_vel in np.linspace(-0.5, 1.0, 4)
+                        for ang_vel in np.linspace(-1.0, 1.0, 5)
+                    ]
                 )
-                current_velocity=possible_velocities[discrete_nav_action]
+                current_velocity = possible_velocities[discrete_nav_action]
                 if gripper_is_grasped:
-                    action_to_save=np.array([[current_velocity[0]*3 , current_velocity[1]*3 , 0 , 0, 0 ,0 , 0 ,0 ,0 , 1 ]])
+                    action_to_save = np.array(
+                        [
+                            [
+                                current_velocity[0] * 3,
+                                current_velocity[1] * 3,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                1,
+                            ]
+                        ]
+                    )
                 else:
-                    action_to_save=np.array([[current_velocity[0]*3 , current_velocity[1]*3  , 0 , 0, 0 ,0 , 0 ,0 ,0 , -1 ]]) ## the gripper action should be -1
-               # print("actions to save shape for nav task == ", action_to_save.shape)
+                    action_to_save = np.array(
+                        [
+                            [
+                                current_velocity[0] * 3,
+                                current_velocity[1] * 3,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                -1,
+                            ]
+                        ]
+                    )  ## the gripper action should be -1
+            # print("actions to save shape for nav task == ", action_to_save.shape)
             else:
                 print("Unknown action type")
                 input()
 
-
-
-            if number_of_steps==0:
-                robot_head_depth_temp=[robot_head_depth]
-                rob_qpos_temp=[robot_qpos]
-                rel_resting_pos_temp=[local_ee_pos_relative_to_base-resting_pos]
-                rel_pick_pos_ee_temp=[relative_pick_pos_ee]
-                rel_place_pos_ee_temp=[relative_place_pos_ee]
-                rel_pick_pos_base_temp=[relative_pick_pos_base_polar]
-                rel_place_pos_base_temp=[relative_place_pos_base_polar]
-                is_holding_temp=[np.array([gripper_is_grasped])]
-                action_to_save_temp=[action_to_save[0]]
-
+            if number_of_steps == 0:
+                robot_head_depth_temp = [robot_head_depth]
+                rob_qpos_temp = [robot_qpos]
+                rel_resting_pos_temp = [
+                    local_ee_pos_relative_to_base - resting_pos
+                ]
+                rel_pick_pos_ee_temp = [relative_pick_pos_ee]
+                rel_place_pos_ee_temp = [relative_place_pos_ee]
+                rel_pick_pos_base_temp = [relative_pick_pos_base_polar]
+                rel_place_pos_base_temp = [relative_place_pos_base_polar]
+                is_holding_temp = [np.array([gripper_is_grasped])]
+                action_to_save_temp = [action_to_save[0]]
 
             else:
-                robot_head_depth_temp=np.append( robot_head_depth_temp,[robot_head_depth],axis=0)
-                rob_qpos_temp=np.append( rob_qpos_temp,[robot_qpos],axis=0)
-                rel_resting_pos_temp=np.append( rel_resting_pos_temp,[local_ee_pos_relative_to_base-resting_pos],axis=0)
-                rel_pick_pos_ee_temp=np.append( rel_pick_pos_ee_temp,[relative_pick_pos_ee],axis=0)
-                rel_place_pos_ee_temp=np.append( rel_place_pos_ee_temp,[relative_place_pos_ee],axis=0)
-                rel_pick_pos_base_temp=np.append( rel_pick_pos_base_temp,[relative_pick_pos_base_polar],axis=0)
-                rel_place_pos_base_temp=np.append( rel_place_pos_base_temp,[relative_place_pos_base_polar],axis=0)
-                is_holding_temp=np.append( is_holding_temp,[np.array([gripper_is_grasped])],axis=0)
-                action_to_save_temp=np.append( action_to_save_temp,[action_to_save[0]],axis=0)
-            
-
-
-
+                robot_head_depth_temp = np.append(
+                    robot_head_depth_temp, [robot_head_depth], axis=0
+                )
+                rob_qpos_temp = np.append(rob_qpos_temp, [robot_qpos], axis=0)
+                rel_resting_pos_temp = np.append(
+                    rel_resting_pos_temp,
+                    [local_ee_pos_relative_to_base - resting_pos],
+                    axis=0,
+                )
+                rel_pick_pos_ee_temp = np.append(
+                    rel_pick_pos_ee_temp, [relative_pick_pos_ee], axis=0
+                )
+                rel_place_pos_ee_temp = np.append(
+                    rel_place_pos_ee_temp, [relative_place_pos_ee], axis=0
+                )
+                rel_pick_pos_base_temp = np.append(
+                    rel_pick_pos_base_temp,
+                    [relative_pick_pos_base_polar],
+                    axis=0,
+                )
+                rel_place_pos_base_temp = np.append(
+                    rel_place_pos_base_temp,
+                    [relative_place_pos_base_polar],
+                    axis=0,
+                )
+                is_holding_temp = np.append(
+                    is_holding_temp, [np.array([gripper_is_grasped])], axis=0
+                )
+                action_to_save_temp = np.append(
+                    action_to_save_temp, [action_to_save[0]], axis=0
+                )
 
             ob, reward, done, info = env.step(step_action)
             episode_reward += reward
 
-
-            number_of_steps+=1
+            number_of_steps += 1
 
             if args.viewer and key == "r":
                 done = True
@@ -443,67 +494,91 @@ def main():
 
         success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
         is_failure = success == False
-        print("success == " , success)
+        print("success == ", success)
         if success:
 
             print("successful trajectory")
-            print("Episode ID == " , env.current_episode.episode_id)
+            print("Episode ID == ", env.current_episode.episode_id)
             episode_ids.append(env.current_episode.episode_id)
-            
 
-            print("robot_head_depth_temp shape == ", robot_head_depth_temp.shape)
+            print(
+                "robot_head_depth_temp shape == ", robot_head_depth_temp.shape
+            )
             print("rob_qpos_temp shape == ", rob_qpos_temp.shape)
             print("rel_resting_pos_temp shape == ", rel_resting_pos_temp.shape)
             print("rel_pick_pos_ee_temp shape == ", rel_pick_pos_ee_temp.shape)
-            print("rel_place_pos_ee_temp shape == ", rel_place_pos_ee_temp.shape)
-            print("rel_pick_pos_base_temp shape == ", rel_pick_pos_base_temp.shape)
-            print("rel_place_pos_base_temp shape == ", rel_place_pos_base_temp.shape)
+            print(
+                "rel_place_pos_ee_temp shape == ", rel_place_pos_ee_temp.shape
+            )
+            print(
+                "rel_pick_pos_base_temp shape == ",
+                rel_pick_pos_base_temp.shape,
+            )
+            print(
+                "rel_place_pos_base_temp shape == ",
+                rel_place_pos_base_temp.shape,
+            )
             print("is_holding_temp shape == ", is_holding_temp.shape)
             print("action_to_save_temp shape == ", action_to_save_temp.shape)
-            
 
-            dataset_dict['{}'.format(num_suc_episodes)]={}
-            dataset_dict['{}'.format(num_suc_episodes)]['robot_head_depth']=robot_head_depth_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['rob_qpos']=rob_qpos_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['rel_resting_pos']=rel_resting_pos_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['rel_pick_pos_ee']=rel_pick_pos_ee_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['rel_place_pos_ee']=rel_place_pos_ee_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['rel_pick_pos_base']=rel_pick_pos_base_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['rel_place_pos_base']=rel_place_pos_base_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['is_holding']=is_holding_temp
-            dataset_dict['{}'.format(num_suc_episodes)]['action_to_save']=action_to_save_temp
-           
-            
-                        
-            robot_head_depth_temp=np.array([])
-            rob_qpos_temp=np.array([])
-            rel_resting_pos_temp=np.array([])
-            rob_qpos_temp=np.array([])
-            rel_pick_pos_ee_temp=np.array([])
-            rel_place_pos_ee_temp=np.array([])
-            rel_pick_pos_base_temp=np.array([])
-            rel_place_pos_base_temp=np.array([])
-            is_holding_temp=np.array([])
-            action_to_save_temp=np.array([])
+            dataset_dict["{}".format(num_suc_episodes)] = {}
+            dataset_dict["{}".format(num_suc_episodes)][
+                "robot_head_depth"
+            ] = robot_head_depth_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "rob_qpos"
+            ] = rob_qpos_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "rel_resting_pos"
+            ] = rel_resting_pos_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "rel_pick_pos_ee"
+            ] = rel_pick_pos_ee_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "rel_place_pos_ee"
+            ] = rel_place_pos_ee_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "rel_pick_pos_base"
+            ] = rel_pick_pos_base_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "rel_place_pos_base"
+            ] = rel_place_pos_base_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "is_holding"
+            ] = is_holding_temp
+            dataset_dict["{}".format(num_suc_episodes)][
+                "action_to_save"
+            ] = action_to_save_temp
 
+            robot_head_depth_temp = np.array([])
+            rob_qpos_temp = np.array([])
+            rel_resting_pos_temp = np.array([])
+            rob_qpos_temp = np.array([])
+            rel_pick_pos_ee_temp = np.array([])
+            rel_place_pos_ee_temp = np.array([])
+            rel_pick_pos_base_temp = np.array([])
+            rel_place_pos_base_temp = np.array([])
+            is_holding_temp = np.array([])
+            action_to_save_temp = np.array([])
 
-            total_steps+=number_of_steps
+            total_steps += number_of_steps
 
-            num_suc_episodes+=1
-            print("total number of episodes == " , number_of_episodes+1)
-            print("successful episodes == " , num_suc_episodes )
-            print("total number of steps == " , total_steps)
-            print("len(all_episode_stats) == " , len(all_episode_stats) )
-            if num_suc_episodes%50 == 49:
-                saves+=1
-            
-                with open('/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs/part_{}.pkl'.format(saves), 'wb') as f:
+            num_suc_episodes += 1
+            print("total number of episodes == ", number_of_episodes + 1)
+            print("successful episodes == ", num_suc_episodes)
+            print("total number of steps == ", total_steps)
+            print("len(all_episode_stats) == ", len(all_episode_stats))
+            if num_suc_episodes % 50 == 49:
+                saves += 1
+
+                with open(
+                    "./collected_data_diffusion/tidy_house/complete_rearrange_trajs/part_{}.pkl".format(
+                        saves
+                    ),
+                    "wb",
+                ) as f:
                     pickle.dump(dataset_dict, f)
-                    dataset_dict={} 
-
-
-
-
+                    dataset_dict = {}
 
         if args.save_video == "all" or (
             args.save_video == "failure" and is_failure
@@ -527,7 +602,7 @@ def main():
                 print("Completed")
                 break
 
-        number_of_episodes+=1
+        number_of_episodes += 1
 
     env.close()
 
