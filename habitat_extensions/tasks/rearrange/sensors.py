@@ -45,7 +45,8 @@ class PositionSensor(MySensor):
     def get_observation(self, *args, task: RearrangeTask, **kwargs):
         position = self._get_world_position(*args, task=task, **kwargs)
         position = mn.Vector3(position)
-
+        #print("position == ", position)
+		
         robot = self._sim.robot
         frame = self.config.get("FRAME", "world")
 
@@ -61,7 +62,7 @@ class PositionSensor(MySensor):
             T = task.start_base_T.inverted()
         else:
             raise NotImplementedError(frame)
-
+        #print("robot.base_T == " ,robot.base_T)
         position = T.transform_point(position)
         return np.array(position, dtype=np.float32)
 
@@ -158,6 +159,8 @@ class PickGoalSensor(PositionSensor):
     cls_uuid = "pick_goal"
 
     def _get_world_position(self, *args, task: RearrangeTask, **kwargs):
+     #   print("task == ", task)
+      #  input()
         return task.pick_goal
 
 
@@ -166,7 +169,12 @@ class PlaceGoalSensor(PositionSensor):
     cls_uuid = "place_goal"
 
     def _get_world_position(self, *args, task: RearrangeTask, **kwargs):
+        
+   #     print("place goal == ", task.place_goal)
+  #      input()
         return task.place_goal
+#place goal ==  [1.30706 0.42037 5.04403]
+#pick goal ==  [0.90337 0.43165 7.15821]
 
 
 @registry.register_sensor
@@ -471,6 +479,9 @@ class PlaceObjectSuccess(MyMeasure):
         measures = task.measurements.measures
         obj_to_goal_dist = measures[ObjectToGoalDistance.cls_uuid].get_metric()
         self._metric = obj_to_goal_dist <= self._config.THRESHOLD
+       # print("obj_to_goal_dist == " , obj_to_goal_dist)
+     #   if self._metric:
+      #     input()
 
 
 @registry.register_measure

@@ -171,6 +171,7 @@ def main():
         dest="config_path",
         type=str,
         default="configs/rearrange/tasks/play.yaml",
+     #  default="/home/shokry/hab-mobile-manipulation/configs/rearrange/composite/tidy_house/base.yaml",
     )
     parser.add_argument(
         "opts",
@@ -198,9 +199,11 @@ def main():
     config = load_config(args.config_path)
     if "TASK_CONFIG" in config:
         # Reload as RLEnv
+
         config = get_config(args.config_path, opts=args.opts)
     else:
         config = get_env_config_from_task_config(config)
+
         if args.opts:
             config.defrost()
             config.merge_from_list(args.opts)
@@ -226,8 +229,8 @@ def main():
     def reset():
         obs = env.reset()
         info = {}
-        print("episode_id", env.habitat_env.current_episode.episode_id)
-        print("scene_id", env.habitat_env.current_episode.scene_id)
+       # print("episode_id", env.habitat_env.current_episode.episode_id)
+        #print("scene_id", env.habitat_env.current_episode.scene_id)
         return obs, info
 
     env.seed(0)

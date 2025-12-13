@@ -21,6 +21,7 @@ class RearrangePickTask(RearrangeTask):
     # ---------------------------------------------------------------------------- #
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self._cache_start_states = dict()
         self._cache_start_positions = dict()
         self._cache_max_fridge_state = dict()
@@ -79,32 +80,49 @@ class RearrangePickTask(RearrangeTask):
     def initialize(self, episode: RearrangeEpisode):
         start_state = None  # (start_pos, start_ori)
         sim_state = self._sim.get_state()  # snapshot
-        self.episode = episode
+        self.episode=episode
         n_targets = len(self._sim.targets)
-        self.target_index = None
+      #  print("episode == " , episode)
+      #  print("targets == " , self._sim.targets)
+        self.target_index=None
         if "TARGET_INDEX" in self._config:
             tgt_indices = [self._config.TARGET_INDEX]
         else:
             tgt_indices = self.np_random.permutation(n_targets)
-        
+       #     print("target indices == " ,  tgt_indices)
         keys=[]
-        
+
+
+
+
         for key in self._sim.targets.keys():
             keys.append(key)
 
         # ---------------------------------------------------------------------------- #
         # Sample a collision-free start state
         # ---------------------------------------------------------------------------- #
+
+
+      #  tgt_indices=[1]
+
+
+
+
+
         for tgt_idx in tgt_indices:
             self._set_target(tgt_idx)
+          #  print("target index == " , tgt_idx)
             self.target_index=tgt_idx
             # NOTE(jigu): pick goal is defined before receptacle is set
             self.pick_goal = np.array(
                 self.tgt_obj.translation, dtype=np.float32
             )
             self.pick_goal_T=np.array(self.tgt_obj.transformation , dtype=np.float32 )
+          #  print("pick goal for index " , tgt_idx , " == ", self.pick_goal_T)
             self.place_goal=self._sim.targets['{}'.format(keys[tgt_idx])].translation
             self.place_goal_T=self._sim.targets['{}'.format(keys[tgt_idx])]
+          #  print("place goal for index " , tgt_idx , " == " , self.place_goal)
+          #  input()  #### add attributes for the pick and place positions and transformations to be able to access them 
             if self._has_cache_start_state(episode.episode_id):
                 (
                     start_state,
@@ -345,14 +363,15 @@ class RearrangePickTask(RearrangeTask):
                 return start_state
 
     def render(self, mode):
-        # if self._has_target_in_container():
+        
+     #   if self._has_target_in_container():
             # self._sim.visualize_frame(
             #     "receptacle", self.tgt_receptacle_link.transformation
             # )
 
-            # self._sim.viz_objs["pick_goal"] = self._sim.add_viz_obj(
-            #     self.pick_goal
-            # )
+      #      self._sim.viz_objs["pick_goal"] = self._sim.add_viz_obj(
+       #         self.pick_goal
+        #    )
 
             # pos, ori = compute_start_state(
             #     self._sim, self.pick_goal, self.init_start_pos

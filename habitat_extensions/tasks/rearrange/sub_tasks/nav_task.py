@@ -30,23 +30,46 @@ class RearrangeNavTask(RearrangeTask):
         n_targets = len(self._sim.targets)
         if "TARGET_INDEX" in self._config:
             tgt_indices = [self._config.TARGET_INDEX]
+            #print("target index in config == " , tgt_indices)
+            #input()
         else:
-            tgt_indices = self.np_random.permutation(n_targets)  # the config file doesn't have target indicies
+            tgt_indices = self.np_random.permutation(n_targets)  ### the config file doesn't have target indicies
+          #  print("target index random == " , tgt_indices)
+          #  input()    
+
+
+
+      #  tgt_indices=[1]
+
+
+
 
         for tgt_idx in tgt_indices:
             self.target_index=tgt_idx
             self._set_target(tgt_idx)
+       #     print("target index == " , tgt_idx)
+         #   print("episode.episode_id == " , episode.episode_id)
+         #   input()
             supported_tasks = self._get_supported_tasks()
             supported_tasks = self.np_random.permutation(
                 supported_tasks
             ).tolist()
+           # print("target index == " , tgt_idx) 
+           # print("supported tasks == ", supported_tasks)
+           # input()
             # Decide pick goal before initializing subtask and receptacle
             self.pick_goal = np.array(
                 self.tgt_obj.translation, dtype=np.float32
             )
+         #   print("pick goals == " , self.pick_goal)
+          #  print("pick object specs == " , self.tgt_obj.transformation )
             self.place_goal = np.array(
                 self.tgt_T.translation, dtype=np.float32
             )
+         #   print("place goal == " , self.place_goal)
+          #  print("place object specs == " , self.tgt_T )
+            
+           # input()
 
             for sub_task in supported_tasks:
                 self._set_sub_task(sub_task)
@@ -107,8 +130,14 @@ class RearrangeNavTask(RearrangeTask):
         self.sub_task = sub_task
         if sub_task == "place":
             self.tgt_receptacle_info = self._goal_receptacles[self.tgt_idx]
+          #  print("place receptacle == " , self.tgt_receptacle_info)
+          #  print("place target == " , self.place_goal)
+          #  input()
         else:
             self.tgt_receptacle_info = self._target_receptacles[self.tgt_idx]
+           # print("pick receptacle == " , self.tgt_receptacle_info)
+           # print("pick target == " , self.pick_goal)
+           # input()
 
     def _initialize_target_receptacle(self):
         self.tgt_receptacle = None
@@ -143,6 +172,7 @@ class RearrangeNavTask(RearrangeTask):
                 # print(init_qpos, self.tgt_receptacle.joint_positions)
 
             T = self.tgt_receptacle.transformation
+
             offset = mn.Vector3(1.0, 0, 0)
             self.init_start_pos = np.array(T.transform_point(offset))
 
@@ -176,8 +206,11 @@ class RearrangeNavTask(RearrangeTask):
                     self.tgt_obj.translation = self.tgt_obj.translation + t
 
             T = self.tgt_receptacle_link.transformation
+
             offset = mn.Vector3(0.8, 0, 0)
             self.init_start_pos = np.array(T.transform_point(offset))
+
+
 
         # PrepareGroceries
         elif (
@@ -199,6 +232,7 @@ class RearrangeNavTask(RearrangeTask):
             self.nav_goal = compute_start_state(
                 self._sim, self.pick_goal, init_start_pos=self.init_start_pos
             )
+            
         elif self.sub_task == "place":
             self.nav_goal = compute_start_state(
                 self._sim, self.place_goal, init_start_pos=self.init_start_pos
@@ -345,6 +379,7 @@ class RearrangeNavTask(RearrangeTask):
 class RearrangeNavTaskV1(RearrangeNavTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self._cache_nav_goals = dict()
 
     def _has_cache_nav_goals(self, episode_id):
@@ -370,7 +405,8 @@ class RearrangeNavTaskV1(RearrangeNavTask):
     def _initialize_goals(self, episode: RearrangeEpisode) -> bool:
         self.nav_goals = None
         self.look_at_pos = None
-
+       # print("in the initialize goal fn")
+      #  input()
         height = self._sim.pathfinder.snap_point(self.pick_goal)[1]
         assert not np.isnan(height), self.pick_goal
         receptacle_link_id = self.tgt_receptacle_info[1]
@@ -486,7 +522,8 @@ class RearrangeNavTaskV1(RearrangeNavTask):
 
         if self.nav_goals is None or len(self.nav_goals) == 0:
             return False
-
+       # print("self.nav_goals == " ,self.nav_goals)
+      #  input()
         return True
 
     def render(self, mode):

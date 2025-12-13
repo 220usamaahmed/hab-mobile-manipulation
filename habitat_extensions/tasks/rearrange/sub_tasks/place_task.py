@@ -17,6 +17,7 @@ from .pick_task import RearrangePickTask
 
 @registry.register_task(name="RearrangePlaceTask-v0")
 class RearrangePlaceTask(RearrangePickTask):
+
     def initialize(self, episode: RearrangeEpisode):
         start_state = None  # (start_pos, start_ori)
         sim_state = self._sim.get_state()  # snapshot
@@ -27,6 +28,7 @@ class RearrangePlaceTask(RearrangePickTask):
         else:
             tgt_indices = self.np_random.permutation(n_targets)
         
+        
         keys=[]
         for key in self._sim.targets.keys():
             keys.append(key)
@@ -36,13 +38,17 @@ class RearrangePlaceTask(RearrangePickTask):
         # ---------------------------------------------------------------------------- #
         # Sample a collision-free start state
         # ---------------------------------------------------------------------------- #
+      #  tgt_indices=[1]
+#        input()
         for tgt_idx in tgt_indices:
             self.target_index=tgt_idx
             self._set_target(tgt_idx)
+            #print("target index == " , tgt_idx)
             self.place_goal = np.array(
                 self.tgt_T.translation, dtype=np.float32
             )
             self.place_goal_T=np.array(self.tgt_T, dtype=np.float32)
+            
             
             self.pick_goal=np.array(self.tgt_obj.translation, dtype=np.float32)
             self.pick_goal_T=np.array(self.tgt_obj.transformation , dtype=np.float32 )

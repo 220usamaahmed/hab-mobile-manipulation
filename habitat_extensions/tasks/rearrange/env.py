@@ -24,6 +24,8 @@ import inspect
 @baseline_registry.register_env(name="RearrangeRLEnv-v0")
 class RearrangeRLEnv(RLEnv):
     def __init__(self, config: Config, dataset: Optional[Dataset] = None):
+      #  print("in the rearrange env")
+       # input()
         self._rl_config = config.RL
         self._core_env_config = config.TASK_CONFIG
         self._prev_env_obs = None
@@ -39,27 +41,42 @@ class RearrangeRLEnv(RLEnv):
     def step(self, *args, **kwargs):
         observations, reward, done, info = super().step(*args, **kwargs)
         self._prev_env_obs = observations
+     #   print("args == ", *args)
+     #   print("kwargs == ", **kwargs)
+     #   print("obs == ", observations)
+     #   print("reward == ", reward)
+     #   print("info == ", info)
+     #   input()
         return observations, reward, done, info
 
     def get_success(self):
+       # print("in get success")
+       # input()
         measures = self._env.task.measurements.measures
         success_measure = self._rl_config.SUCCESS_MEASURE
+       # print("self._rl_config.SUCCESS_MEASURE == " , self._rl_config.SUCCESS_MEASURE)
+      #  input()
         if success_measure in measures:
             success = measures[success_measure].get_metric()
+        #    print("success_measure in measures")
         else:
             success = False
         if self._rl_config.get("SUCCESS_ON_STOP", False):
             success = success and self._env.task.should_terminate
+       # print("success == " , success , "self._env.task.should_terminate == " , self._env.task.should_terminate)
+       # input()
+            
         return success
 
     def get_reward(self, observations: Observations):
         metrics = self._env.get_metrics()
 
         reward = self._rl_config.SLACK_REWARD
-        for reward_measure in self._rl_config.REWARD_MEASURES:
-            # print(reward_measure, metrics[reward_measure])
-            reward += metrics[reward_measure]
 
+        for reward_measure in self._rl_config.REWARD_MEASURES:
+            #print(reward_measure, metrics[reward_measure])
+            reward += metrics[reward_measure]
+        #input()
         if self.get_success():
             reward += self._rl_config.SUCCESS_REWARD
 

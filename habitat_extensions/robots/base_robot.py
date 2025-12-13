@@ -78,9 +78,11 @@ class Robot:
             art_obj_mgr.remove_object_by_id(self.sim_obj.object_id)
             self.sim_obj = None
 
+
         self.sim_obj = art_obj_mgr.add_articulated_object_from_urdf(
             self.params.urdf_path, fixed_base=self.params.fixed_base
         )
+
         self.sim_obj.awake = True
         # NOTE(jigu): I do not use @auto_clamp_joint_limits due to legacy issues.
         # self.sim_obj.auto_clamp_joint_limits = True

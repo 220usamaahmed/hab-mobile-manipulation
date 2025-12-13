@@ -27,6 +27,8 @@ class RearrangeEpisode(Episode):
     :property targets: Maps an object instance to a new target location for placement in the task. {instance_name -> target_transform}
     :property markers: Indicate points of interest in the scene such as grasp points like handles. {marker name -> (type, (params))}
     """
+    #print("in the rearrange episode")
+    #input()
     ao_states: Dict[str, Dict[int, float]]
     rigid_objs: List[Tuple[str, np.ndarray]]
     targets: Dict[str, np.ndarray]
@@ -53,7 +55,21 @@ class RearrangeDataset(Dataset):
         if config is None:
             return
 
+
+#################################################################
+###############################################################
         datasetfile_path = config.DATA_PATH.format(split=config.SPLIT)
+        #datasetfile_path = "/home/shokry/hab-mobile-manipulation/data/versioned_data/rearrange_pick_dataset_v0_1.0/rearrange_pick_replica_cad_v0/empty.json.gz"
+      #  print("path == ", datasetfile_path)
+        
+        
+#################################################################
+###############################################################
+
+
+
+
+
         with gzip.open(datasetfile_path, "rt") as f:
             self.from_json(f.read(), scenes_dir=config.SCENES_DIR)
 
@@ -73,6 +89,8 @@ class RearrangeDataset(Dataset):
     def from_json(self, json_str: str, scenes_dir: Optional[str]) -> None:
         deserialized = json.loads(json_str)
         for episode in deserialized["episodes"]:
+          #  print("episode == ", episode)
+           # input()
             episode = RearrangeEpisode(**episode)
             self.episodes.append(episode)
 
@@ -88,7 +106,11 @@ class RearrangeTask(EmbodiedTask):
     # should be called for force termination only
     _should_terminate: bool
 
-    # added by me         
+
+
+        
+##############################################
+######## added by me         
     def initialize_to_given_pose(self, episode: RearrangeEpisode , start_state=None,qpos=None):
 
         if self._config.get("FRIDGE_INIT", False):
@@ -100,14 +122,31 @@ class RearrangeTask(EmbodiedTask):
         self._sim.robot.arm_joint_pos = qpos
         self._sim.robot.arm_motor_pos = qpos
         self._sim.internal_step_by_time(0.1)
-     
+        
+       # print("self.place_goal == ", self.place_goal)
+      #  input()
+
+        # Cache start positions
+    #    self.obj_start_pos = self._sim.get_rigid_objs_pos_dict()
+      #  tgt_idx = self._config.get("TARGET_INDEX", 0)
+      #  if tgt_idx == -1:
+      #      tgt_idx = self.np_random.choice(len(self._sim.targets))
+      #  self.set_target(tgt_idx)
+        
+        
+        
+
     def set_target(self, index):
         self.tgt_idx = index
         self.tgt_obj, self.tgt_T = self._sim.get_target(self.tgt_idx)
         self.pick_goal = self.obj_start_pos[self.tgt_obj.handle]
         self.place_goal = np.array(self.tgt_T.translation, dtype=np.float32)
-        # self.nav_goal_pick = compute_start_state(self._sim, self.pick_goal)
-        # self.nav_goal_place = compute_start_state(self._sim, self.place_goal)
+       # self.nav_goal_pick = compute_start_state(self._sim, self.pick_goal)
+       # self.nav_goal_place = compute_start_state(self._sim, self.place_goal)
+############################################### 
+        
+
+
 
     def overwrite_sim_config(self, sim_config, episode: RearrangeEpisode):
         sim_config.defrost()
@@ -150,7 +189,9 @@ class RearrangeTask(EmbodiedTask):
 
     def reset(self, episode: RearrangeEpisode):
         self._sim.reset()
-
+     #   print("in reset of task.py")
+       # print("episode == " , episode)
+      #  input()
         # Clear and cache
         self.tgt_idx = None
         self.tgt_obj, self.tgt_T = None, None
@@ -159,16 +200,26 @@ class RearrangeTask(EmbodiedTask):
         self._target_receptacles = episode.target_receptacles
         self._goal_receptacles = episode.goal_receptacles
 
-        self.initialize(episode) # this function is found in the file habitat_extensions/tasks/rearrange/composite_tasks.py
+        self.initialize(episode) ## this function is found in the file habitat_extensions/tasks/rearrange/composite_tasks.py
+   #     print("self.tgt_idx == " , self.tgt_idx)
+    #    input()
         self._reset_stats()
 
         for action_instance in self.actions.values():
             action_instance.reset(episode=episode, task=self)
         return self._get_observations(episode)
         
-    # added by me to reset the agent to a given position  
+########################################
+####### added by me to reset the agent to a given position  
     def reset_to_given_pose(self, episode: RearrangeEpisode, start_state=None,qpos=None):
         self._sim.reset()
+       # print("in reset of task.py")
+        #input()
+        # Clear and cache
+       # self.tgt_idx = None
+       # self.tgt_obj, self.tgt_T = None, None
+       # self.tgt_receptacle_info = None
+       # self.start_ee_pos = None  # for ee-space controller
         self._target_receptacles = episode.target_receptacles
         self._goal_receptacles = episode.goal_receptacles
 
@@ -180,12 +231,21 @@ class RearrangeTask(EmbodiedTask):
             action_instance.reset(episode=episode, task=self)
         return self._get_observations(episode)
 
+
+
+################################################
+
+
     def initialize(self, episode: RearrangeEpisode):
+      #  print("in intialize")
+      #  input()
         self._initialize_ee_pos()
         start_pos = self._sim.pathfinder.get_random_navigable_point()
         self._sim.robot.base_pos = start_pos
         self._sim.robot.base_ori = self.np_random.uniform(0, 2 * np.pi)
+
         self._sim.internal_step_by_time(0.1)
+
 
     def _get_start_ee_pos(self):
         # NOTE(jigu): defined in pybullet link frame
@@ -195,12 +255,13 @@ class RearrangeTask(EmbodiedTask):
         )
 
         # The noise can not be too large (e.g. 0.05)
-        # ee_noise = self._config.get("EE_NOISE", 0.025)*2
+       # ee_noise = self._config.get("EE_NOISE", 0.025)*2
         ee_noise = self._config.get("EE_NOISE", 0.025)*1.5
         if ee_noise > 0:
             noise = self.np_random.normal(0, ee_noise, [3])
             noise = np.clip(noise, -ee_noise * 2, ee_noise * 2)
             start_ee_pos = start_ee_pos + noise
+
 
         return start_ee_pos
 
@@ -233,6 +294,8 @@ class RearrangeTask(EmbodiedTask):
         )
 
     def _get_observations(self, episode):
+        #print("targets == ", self._sim.get_target(4))
+        #input()
         observations = self._sim.get_observations()
         observations.update(
             self.sensor_suite.get_observations(

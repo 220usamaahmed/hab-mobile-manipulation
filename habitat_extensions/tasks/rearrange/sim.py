@@ -148,6 +148,7 @@ class RearrangeSim(HabitatSim):
         if not is_same_scene:
             self.robot.reconfigure()
             self.robot.set_semantic_ids(100)
+
         elif self._initial_state is not None:
             self.robot.set_state(self._initial_state["robot_state"])
 
@@ -165,6 +166,7 @@ class RearrangeSim(HabitatSim):
         self._add_rigid_objects()
         self._add_markers()
         self._add_targets()
+
 
         assert len(self.viz_objs) == 0, self.viz_objs
         self.viz_objs = OrderedDict()
@@ -298,12 +300,24 @@ class RearrangeSim(HabitatSim):
     def _add_targets(self):
         self.targets = OrderedDict()
         episode = self.habitat_config.EPISODE
+     #   print("targets == " , episode["targets"])
+     #   print("episode configs == ", episode)
+      #  input()
         # handles = sorted(episode["targets"].keys())
         # NOTE(jigu): The order of targets is used in `target_receptacles` and `goal_receptacles`
         handles = list(episode["targets"].keys())
+
         for handle in handles:
             T = episode["targets"][handle]
+           # print("T == ", T)
             self.targets[handle] = mn_utils.orthogonalize(T)
+          #  print("self.targets[handle] == " , self.targets[handle])
+         #   input()
+
+      #  print("self.targets == " , self.targets)
+       # input()
+
+
 
     def _recompute_navmesh(self):
         # navmesh_path = self._current_scene + ".navmesh"
@@ -391,6 +405,11 @@ class RearrangeSim(HabitatSim):
         self.robot.update_cameras()
         self._prev_sim_obs = self.get_sensor_observations()
         observations = self._sensor_suite.get_observations(self._prev_sim_obs)
+        #robot_state= self.robot.get_state()
+        #target=self.get_target(1)
+      #  print("robot_state == ", robot_state)
+       # print("target == ", target)
+       # input()
         return observations
 
     def internal_step(self, dt=None):

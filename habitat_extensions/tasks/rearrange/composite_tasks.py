@@ -14,7 +14,9 @@ from .task_utils import (
 
 @registry.register_task(name="TidyHouseTask-v0")
 class TidyHouseTask(RearrangeTask):
+
     def initialize(self, episode: RearrangeEpisode):
+
         if self._config.get("FRIDGE_INIT", False):
             self._sim.set_fridge_state_by_motor(2.356)
 
@@ -33,12 +35,16 @@ class TidyHouseTask(RearrangeTask):
         # Cache start positions
         self.obj_start_pos = self._sim.get_rigid_objs_pos_dict()
         tgt_idx = self._config.get("TARGET_INDEX", 0)
-        # print("tgt_idx in == " , tgt_idx)
-        if tgt_idx == -1:    
+       # print("tgt_idx in == " , tgt_idx)
+        if tgt_idx == -1:
+            
             tgt_idx = self.np_random.choice(len(self._sim.targets))
         self.set_target(tgt_idx)
         
-    # added by me         
+        
+        
+##############################################
+######## added by me         
     def initialize_to_given_pose(self, episode: RearrangeEpisode , start_state=None):
 
         if self._config.get("FRIDGE_INIT", False):
@@ -56,6 +62,10 @@ class TidyHouseTask(RearrangeTask):
         if tgt_idx == -1:
             tgt_idx = self.np_random.choice(len(self._sim.targets))
         self.set_target(tgt_idx)
+        
+############################################### 
+        
+        
 
     def set_target(self, index):
         self.tgt_idx = index
@@ -112,6 +122,7 @@ class TidyHouseTask(RearrangeTask):
 @registry.register_task(name="SetTableTask-v0")
 class SetTableTask(RearrangeTask):
     def initialize(self, episode: RearrangeEpisode):
+    
         start_state = self.sample_start_state()
         if start_state is None:
             raise RuntimeError(

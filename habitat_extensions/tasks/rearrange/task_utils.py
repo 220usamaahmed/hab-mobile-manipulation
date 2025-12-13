@@ -27,6 +27,7 @@ def compute_start_state(sim: RearrangeSim, tgt_pos, init_start_pos=None):
         start_pos = sim.pathfinder.snap_point(tgt_pos)
     else:
         start_pos = sim.pathfinder.snap_point(init_start_pos)
+
     assert not np.isnan(start_pos).any(), tgt_pos
     offset = tgt_pos - np.array(start_pos)
     start_ori = np.arctan2(-offset[2], offset[0])

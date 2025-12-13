@@ -173,6 +173,7 @@ class SetArticulatedObjectTask(RearrangeTask):
 
 @registry.register_task(name="RearrangeOpenDrawerTask-v0")
 class RearrangeOpenDrawerTask(SetArticulatedObjectTask):
+
     def _set_marker(self, episode: RearrangeEpisode):
         self.tgt_obj, self.tgt_T = self._sim.get_target(0)
         self.pick_goal = np.array(self.tgt_obj.translation, dtype=np.float32)
