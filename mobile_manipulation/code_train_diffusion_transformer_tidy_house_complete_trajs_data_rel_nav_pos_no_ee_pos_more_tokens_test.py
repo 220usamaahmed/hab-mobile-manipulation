@@ -105,8 +105,8 @@ Feat_ext = SimpleCNN(1, (128, 128), 256).to(device).to(torch.float32)
 
 
 
-#directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs'
-directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house'
+#directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data'
+directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house/more_data_with_rel_nav_pos_and_arm_depth'
 
 Batch_size=64
 
@@ -215,13 +215,19 @@ class DiffusionTransformerBlock(nn.Module):
 
 # Conditional Diffusion Model
 class ConditionalDiffusionModel(nn.Module):
-    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=256, hidden_dim=256, num_layers=2):
+    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,pos_dim=3, polar_pos_dim=2, gripper_dim=1,qpos_dim=7, depth_features_dim=256, hidden_dim=256, num_layers=2):
         super().__init__()
 
         self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
         self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
-        self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
+        self.rel_nav_pos_pick_projection= nn.Linear(polar_pos_dim, hidden_dim)
+        self.rel_nav_pos_place_projection= nn.Linear(polar_pos_dim, hidden_dim)
+        self.rel_resting_pos_pick_projection= nn.Linear(pos_dim, hidden_dim)
+        self.rel_resting_pos_place_projection= nn.Linear(pos_dim, hidden_dim)
+        self.qpos_projection= nn.Linear(qpos_dim, hidden_dim)
+        self.rel_resting_pos_projection= nn.Linear(pos_dim, hidden_dim)
+        self.gripper_state_projection= nn.Linear(gripper_dim, hidden_dim)
 
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(hidden_dim),
@@ -236,13 +242,13 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=11)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=26)  # Sensor position embedding
 
 
-    def forward(self, visual_obs, non_visual_obs, noisy_action, t):
+    def forward(self, visual_obs, rel_nav_pos_pick, rel_nav_pos_place , qpos ,rel_resting_pos_pick,rel_resting_pos_place ,gripper_state, noisy_action, t):
 
-        batch_size=non_visual_obs.shape[0]
-        context_length=non_visual_obs.shape[1]
+        batch_size=rel_nav_pos_pick.shape[0]
+        context_length=rel_nav_pos_pick.shape[1]
 
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
      #   print("noisy action shape after projection == " , noisy_action.shape)
@@ -262,14 +268,45 @@ class ConditionalDiffusionModel(nn.Module):
        # print("shape after reshaping back to batch and context length == " , visual_obs.shape )
 
         #print("initial non visual observations shape == " , non_visual_obs.shape)
-        non_visual_obs=self.non_visual_obs_projection(non_visual_obs.to(torch.float32))
-        #print("shape after reshaping back to batch and context length == " , non_visual_obs.shape )
+        rel_nav_pos_pick=rel_nav_pos_pick.reshape(batch_size*context_length, -1)
+        rel_nav_pos_pick=self.rel_nav_pos_pick_projection(rel_nav_pos_pick.to(torch.float32))
+        rel_nav_pos_pick=rel_nav_pos_pick.reshape(batch_size, context_length, -1)
+
+        rel_nav_pos_place=rel_nav_pos_place.reshape(batch_size*context_length, -1)
+        rel_nav_pos_place=self.rel_nav_pos_place_projection(rel_nav_pos_place.to(torch.float32))
+        rel_nav_pos_place=rel_nav_pos_place.reshape(batch_size, context_length, -1)
+      #  print("shape after rel nav pos projection == " , rel_nav_pos.shape )
+
+
+        qpos=qpos.reshape(batch_size*context_length, -1)
+        qpos=self.qpos_projection(qpos.to(torch.float32))
+        qpos=qpos.reshape(batch_size, context_length, -1)
+       # print("shape after qpos projection == " , qpos.shape )
+
+        rel_resting_pos_pick=rel_resting_pos_pick.reshape(batch_size*context_length, -1)
+        rel_resting_pos_pick=self.rel_resting_pos_pick_projection(rel_resting_pos_pick.to(torch.float32))
+        rel_resting_pos_pick=rel_resting_pos_pick.reshape(batch_size, context_length, -1)
+
+        rel_resting_pos_place=rel_resting_pos_place.reshape(batch_size*context_length, -1)
+        rel_resting_pos_place=self.rel_resting_pos_place_projection(rel_resting_pos_place.to(torch.float32))
+        rel_resting_pos_place=rel_resting_pos_place.reshape(batch_size, context_length, -1)       
+        #print("shape after rel resting pos projection == " , rel_resting_pos.shape )
+
+        #print("initial gripper state shape == " , gripper_state.shape)
+        gripper_state=gripper_state.reshape(batch_size*context_length, -1)
+        #print("shape after reshaping gripper state == " , gripper_state.shape )
+        gripper_state=self.gripper_state_projection(gripper_state.to(torch.float32))
+       # print("shape after gripper state projection == " , gripper_state.shape )
+        gripper_state=gripper_state.reshape(batch_size, context_length, -1)
+        #print("shape after gripper state projection == " , gripper_state.shape )
+
+
 
         t=self.time_mlp(t.to(torch.float32))  # Time embedding
         t = t.unsqueeze(1)
        # print("t shape after embedding == " , t.shape)
 
-        encoder_input=torch.cat((visual_obs,non_visual_obs,t),dim=1)
+        encoder_input=torch.cat((visual_obs,rel_nav_pos_pick,rel_nav_pos_place,qpos,rel_resting_pos_pick,rel_resting_pos_place,gripper_state,t),dim=1)
        # print("encoder input shape == " , encoder_input.shape)
         encoder_input=self.encoder_position_embedding(encoder_input)  # Apply sensor position embedding
 
@@ -289,7 +326,7 @@ class ConditionalDiffusionModel(nn.Module):
 
 # Noise Scheduler (like DDPM)
 class NoiseScheduler:
-    def __init__(self, timesteps=500, beta_start=1e-4, beta_end=0.02):
+    def __init__(self, timesteps=500, beta_start=1e-4, beta_end=0.02): #timesteps=500
         self.timesteps = timesteps
         self.betas = torch.linspace(beta_start, beta_end, timesteps)
         self.alphas = 1.0 - self.betas
@@ -305,17 +342,21 @@ class NoiseScheduler:
         x_new=sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
         return sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
 
-    def get_loss(self, model, x_start, t, visual_obs_batch , non_visual_obs_batch): 
+    def get_loss(self, model, x_start, t, visual_obs_batch , rel_nav_pos_batch, qpos_batch ,rel_resting_pos_batch ,gripper_state_batch): 
         noise = torch.randn_like(x_start).to(torch.float32)
         noisy_action = self.q_sample(x_start, t, noise)
-        predicted_noise = model(visual_obs_batch.to(torch.float32), non_visual_obs_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
+        predicted_noise = model(visual_obs_batch.to(torch.float32), rel_nav_pos_batch.to(torch.float32), qpos_batch.to(torch.float32), 
+                                rel_resting_pos_batch.to(torch.float32),gripper_state_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
         return F.mse_loss(predicted_noise, noise)
 
 
 
 def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
     visual_obs=[]
-    non_visual_obs=[]
+    rel_nav_pos=[]
+    qpos=[]
+    rel_resting_pos=[]
+    gripper_state=[]
     actions=[]
 
     number_of_steps=len(episode_data['action_to_save'])
@@ -331,26 +372,37 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
             vis_obs_step.append(episode_data['robot_head_depth'][obs_idx])
         visual_obs.append(np.array(vis_obs_step))
 
-        non_vis_obs_step=[]
-        for obs_idx in range(step,step+num_prev_obs):
 
-            non_vis_obs_step.append( np.concatenate((
-                episode_data['rel_resting_pos'][obs_idx],
-                episode_data['rel_pick_pos_ee'][obs_idx],
-                episode_data['rel_place_pos_ee'][obs_idx],
-                episode_data['rel_pick_pos_base'][obs_idx],
-                episode_data['rel_place_pos_base'][obs_idx],
-                episode_data['rob_qpos'][obs_idx],
-                np.array([int(episode_data['is_holding'][obs_idx])]),
-            ),axis=-1) )
-        non_visual_obs.append(np.array(non_vis_obs_step))
+        rel_nav_pos_step=[]
+        for obs_idx in range(step,step+num_prev_obs):
+            if episode_data['is_holding'][obs_idx]:
+                rel_nav_pos_step.append(episode_data['rel_place_pos_base'][obs_idx])
+            else:
+                rel_nav_pos_step.append(episode_data['rel_pick_pos_base'][obs_idx])
+        rel_nav_pos.append(np.array(rel_nav_pos_step))
+
+
+        qpos_step=[]
+        for obs_idx in range(step,step+num_prev_obs):
+            qpos_step.append(episode_data['rob_qpos'][obs_idx])
+        qpos.append(np.array(qpos_step))
+
+        rel_resting_pos_step=[]
+        for obs_idx in range(step,step+num_prev_obs):
+            rel_resting_pos_step.append(episode_data['rel_resting_pos'][obs_idx])
+        rel_resting_pos.append(np.array(rel_resting_pos_step))
+
+        gripper_state_step=[]
+        for obs_idx in range(step,step+num_prev_obs):
+            gripper_state_step.append(episode_data['is_holding'][obs_idx])
+        gripper_state.append(np.array(gripper_state_step))
 
         action_step=[]
         for act_idx in range(step+num_prev_obs,step+num_prev_obs+num_predicted_actions):
             action_step.append(episode_data['action_to_save'][act_idx])
         actions.append(np.array(action_step))
 
-    return np.array(visual_obs), np.array(non_visual_obs), np.array(actions)
+    return np.array(visual_obs), np.array(rel_nav_pos), np.array(qpos),np.array(rel_resting_pos),np.array(gripper_state) ,np.array(actions)
 
 
 
@@ -366,7 +418,7 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
     file_names= get_filenames_in_directory(upload_directory)
 
     model = ConditionalDiffusionModel().to(device)
-    model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
+  #  model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
     model.to(device)
     scheduler = NoiseScheduler()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
@@ -392,7 +444,7 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
             for episode_key in data.keys():
 
                 episode_data=data[episode_key]
-                visual_obs_data,non_visual_obs_data,action_data=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
+                visual_obs_data , rel_nav_pos_data , qpos_data, rel_resting_pos_data , gripper_state_data ,action_data=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
                 number_of_samples=action_data.shape[0]
                 number_of_batches=math.ceil(number_of_samples/Batch_size)
                 
@@ -403,10 +455,13 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
                     if end_idx>number_of_samples:
                         end_idx=number_of_samples
                     visual_obs_batch=torch.from_numpy(visual_obs_data[start_idx:end_idx]).to(device)
-                    non_visual_obs_batch=torch.from_numpy(non_visual_obs_data[start_idx:end_idx]).to(device)
+                    rel_nav_pos_batch=torch.from_numpy(rel_nav_pos_data[start_idx:end_idx]).to(device)
+                    qpos_batch=torch.from_numpy(qpos_data[start_idx:end_idx]).to(device)
+                    rel_resting_pos_batch=torch.from_numpy(rel_resting_pos_data[start_idx:end_idx]).to(device)
+                    gripper_state_batch=torch.from_numpy(gripper_state_data[start_idx:end_idx]).to(device)
                     action_batch=torch.from_numpy(action_data[start_idx:end_idx]).to(device)
                     t = torch.randint(0, scheduler.timesteps, (visual_obs_batch.size(0),), device=device)
-                    loss = scheduler.get_loss(model, action_batch, t, visual_obs_batch , non_visual_obs_batch)*10
+                    loss = scheduler.get_loss(model, action_batch, t, visual_obs_batch , rel_nav_pos_batch, qpos_batch ,rel_resting_pos_batch ,gripper_state_batch )*10
                     loss.backward()
                     optimizer.step()
                     total_loss += loss.detach().item()
@@ -415,17 +470,17 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
                     epoch_samples+= number_of_samples
                 
             current_file_idx+=1
-            del visual_obs_data, non_visual_obs_data, action_data
+            del visual_obs_data, rel_nav_pos_data , qpos_data, rel_resting_pos_data , gripper_state_data ,action_data
             gc.collect()
             torch.cuda.empty_cache()
             
-            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch+1+100, current_file_idx, len(file_names), file_name, total_loss/total_samples))
+            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch+1 , current_file_idx, len(file_names), file_name, total_loss/total_samples))
 
         del data
         gc.collect()
         torch.cuda.empty_cache()
         train_loss = epoch_loss / epoch_samples
-        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch+1+100, train_loss))
+        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch+1, train_loss))
         writer.add_scalar('Loss/Train', train_loss, epoch)
 
         if epoch%10 ==0 :
@@ -433,7 +488,7 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
            #     if param.grad is not None:
             #        print(f"{name}: grad norm = {param.grad.norm().item()}")
           #  input()
-            torch.save(model.state_dict(), os.path.join(save_directory, 'model_{}.pt'.format(epoch+100)) )
+            torch.save(model.state_dict(), os.path.join(save_directory, 'model_{}.pt'.format(epoch)) )
 
 
 

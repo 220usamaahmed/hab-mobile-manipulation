@@ -381,30 +381,38 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=11)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Sensor position embedding
 
 
     def forward(self, visual_obs, non_visual_obs, noisy_action, t):
 
         batch_size=non_visual_obs.shape[0]
         context_length=non_visual_obs.shape[1]
+        
 
 
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
 
-     #   print("initial visual observation shape == " , visual_obs.shape)
+       # print("initial visual observation shape == " , visual_obs.shape)
         if len(visual_obs.shape)==5:
             visual_obs=visual_obs.permute(0,1,4,2,3) 
-            visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+            arranged_visual_obs=rearrange(visual_obs, 'b s c h w -> (b s) c h w')
+
+            visual_obs=self.visual_feature_extractor(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+
         elif len(visual_obs.shape)==4:
             visual_obs=visual_obs.permute(0,3,1,2)
-            visual_obs=Feat_ext(visual_obs)
+            visual_obs=self.visual_feature_extractor(visual_obs)
 
-      #  print("visual featurs shape after feature extraction == " , visual_obs.shape)
         visual_obs=visual_obs.reshape(batch_size*context_length, -1)  # Reshape to (batch_size * context_length, feature_dim)
+
+
+
         visual_obs=self.visual_obs_projection(visual_obs.to(torch.float32))  
        # print("shape after visual feature projection == " , visual_obs.shape )
         visual_obs=visual_obs.reshape(batch_size, context_length, -1)  
+
+
        # print("shape after reshaping back to batch and context length == " , visual_obs.shape )
 
        # print("initial non visual observations shape == " , non_visual_obs.shape)
@@ -512,6 +520,7 @@ class NoiseScheduler:
             visual_obs=visual_obs.unsqueeze(0)  # Add sequence dimension if missing
         visual_obs=visual_obs=visual_obs.repeat(shape[0],1,1,1,1)  # Repeat condition for batch size
         non_visual_obs=non_visual_obs.repeat(shape[0],1,1) 
+
 
         for t in reversed(range(self.timesteps)):
             # Create timestep tensor
@@ -682,11 +691,11 @@ def main():
     # -------------------------------------------------------------------------- #
 
 
-    num_prev_obs=5
+    num_prev_obs=10
     num_predicted_acts=20
 
     diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/model_160.pt",
+    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/accurate_data/model_10_prev_obs_more_data_170.pt",
                                             map_location=device))
     diffusion_policy.to(device)
     diffusion_policy.eval()
@@ -888,6 +897,7 @@ def main():
             elif number_of_steps >= num_prev_obs:
                 visual_obs_buffer=visual_obs_buffer[-num_prev_obs: ]
                 visual_obs_buffer_np=visual_obs_buffer_np[-num_prev_obs: , ...]
+
                 non_visual_obs_buffer=non_visual_obs_buffer[-num_prev_obs: ]
                 non_visual_obs_buffer_np=non_visual_obs_buffer_np[-num_prev_obs: , ...]
 
@@ -896,8 +906,10 @@ def main():
                 with torch.no_grad():
                     shape = (10,20,10)
                     actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
+                    actions[:,:,0:2]*=3.0
                     similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
-                    best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                    if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
+                        best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)                    
                     estimated_action_trajs=actions[best_traj_index]
 
             action=estimated_action_trajs[number_of_steps%10 ].detach().cpu().numpy()
@@ -917,7 +929,7 @@ def main():
             ob, reward, done, info = env.step(step_action)
             episode_reward += reward
 
-
+            print("step number == " , number_of_steps)
             number_of_steps+=1
 
             metrics = extract_scalars_from_info(info)

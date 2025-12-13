@@ -56,25 +56,27 @@ import matplotlib.pyplot as plt
 from torchvision import models, transforms
 from torchvision.utils import save_image, make_grid
 
-import pickle
+import pickle 
 
 import numpy as np
 import inspect
 
 
-device = torch.device(
-    "cuda:0" if torch.cuda.is_available() else torch.device("cpu")
-)
+device = torch.device("cuda:0" if torch.cuda.is_available() else torch.device('cpu'))
+
+
+
+
 
 
 def pca_torch(vectors: torch.Tensor, n_components: int = 2):
     """
     Perform PCA using PyTorch (no external libraries like sklearn).
-
+    
     Args:
         vectors (torch.Tensor): Input data (N, D) where N is the number of samples and D is the dimensionality.
         n_components (int): Number of components to keep (e.g., 2 for 2D visualization).
-
+        
     Returns:
         torch.Tensor: The reduced data (N, n_components).
     """
@@ -83,9 +85,7 @@ def pca_torch(vectors: torch.Tensor, n_components: int = 2):
     centered_vectors = vectors - mean
 
     # Compute the covariance matrix
-    covariance_matrix = torch.mm(centered_vectors.T, centered_vectors) / (
-        vectors.shape[0] - 1
-    )
+    covariance_matrix = torch.mm(centered_vectors.T, centered_vectors) / (vectors.shape[0] - 1)
 
     # Perform SVD
     U, S, V = torch.svd(covariance_matrix)
@@ -98,7 +98,6 @@ def pca_torch(vectors: torch.Tensor, n_components: int = 2):
 
     return reduced_vectors
 
-
 def kmeans_torch(vectors, k, num_iters=100, tol=1e-4):
     N, D = vectors.shape
     indices = torch.randperm(N)[:k]
@@ -107,26 +106,19 @@ def kmeans_torch(vectors, k, num_iters=100, tol=1e-4):
     for _ in range(num_iters):
         dists = torch.cdist(vectors, centroids)
         labels = torch.argmin(dists, dim=1)
-        new_centroids = torch.stack(
-            [
-                (
-                    vectors[labels == i].mean(dim=0)
-                    if (labels == i).any()
-                    else centroids[i]
-                )
-                for i in range(k)
-            ]
-        )
+        new_centroids = torch.stack([
+            vectors[labels == i].mean(dim=0) if (labels == i).any() else centroids[i]
+            for i in range(k)
+        ])
         if torch.norm(centroids - new_centroids).item() < tol:
             break
         centroids = new_centroids
 
     dists = torch.cdist(vectors, centroids)
     closest_dists = dists[torch.arange(vectors.shape[0]), labels]
-    inertia = torch.sum(closest_dists**2).item()
+    inertia = torch.sum(closest_dists ** 2).item()
 
     return labels, centroids, inertia
-
 
 def find_best_k(vectors, k_range=range(1, 11)):
     inertias = []
@@ -137,12 +129,9 @@ def find_best_k(vectors, k_range=range(1, 11)):
     # Elbow detection (simple numerical version)
     diffs = np.diff(inertias)
     second_diffs = np.diff(diffs)
-    elbow_k = k_range[
-        np.argmin(second_diffs) + 2
-    ]  # shift for diff index offset
+    elbow_k = k_range[np.argmin(second_diffs) + 2]  # shift for diff index offset
 
     return elbow_k, inertias
-
 
 def auto_kmeans_cluster(vectors: torch.Tensor, max_k: int = 10):
     """
@@ -163,18 +152,10 @@ def auto_kmeans_cluster(vectors: torch.Tensor, max_k: int = 10):
     labels, centers, _ = kmeans_torch(vectors, best_k)
 
     # Visualizing the clusters with PCA (implemented manually)
-    reduced_vectors = pca_torch(
-        vectors, n_components=2
-    )  # Reduce to 2D for visualization
+    reduced_vectors = pca_torch(vectors, n_components=2)  # Reduce to 2D for visualization
 
     plt.figure(figsize=(8, 6))
-    plt.scatter(
-        reduced_vectors[:, 0].cpu().numpy(),
-        reduced_vectors[:, 1].cpu().numpy(),
-        c=labels.cpu().numpy(),
-        cmap="Spectral",
-        s=10,
-    )
+    plt.scatter(reduced_vectors[:, 0].cpu().numpy(), reduced_vectors[:, 1].cpu().numpy(), c=labels.cpu().numpy(), cmap='Spectral', s=10)
     plt.title(f"K-Means Clustering with k={best_k}")
     plt.colorbar(label="Cluster ID")
     plt.xlabel("PCA Component 1")
@@ -184,155 +165,139 @@ def auto_kmeans_cluster(vectors: torch.Tensor, max_k: int = 10):
     return labels, centers, best_k
 
 
+
+
+
+
+
+
+
+
 def cosine_similarity_matrix_torch(vectors: torch.Tensor) -> torch.Tensor:
     """
     Compute the cosine similarity matrix for a set of vectors using PyTorch.
-
+    
     Parameters:
         vectors (Tensor): A 2D tensor of shape (n_vectors, dimensions)
-
+        
     Returns:
         Tensor: A 2D tensor of shape (n_vectors, n_vectors) with cosine similarities
     """
     # Normalize each vector (row) to unit length
     norms = torch.norm(vectors, dim=1, keepdim=True)  # shape: (n_vectors, 1)
-    normalized_vectors = vectors / (
-        norms + 1e-8
-    )  # add small value to avoid division by zero
-
+    normalized_vectors = vectors / (norms + 1e-8)     # add small value to avoid division by zero
+    
     # Compute cosine similarity as dot product of normalized vectors
     similarity_matrix = torch.matmul(normalized_vectors, normalized_vectors.T)
 
     return similarity_matrix
 
 
-def choose_best_traj(estimated_trajectories, grasped=1):
+def choose_best_traj(estimated_trajectories,grasped=1):
 
-    if len(estimated_trajectories.shape) == 1:
-        num_trajs = 1
-        best_idx = 0
-        best_traj = estimated_trajectories
+    if len(estimated_trajectories.shape)==1:
+        num_trajs=1
+        best_idx=0
+        best_traj=estimated_trajectories
     else:
-        num_trajs = estimated_trajectories.shape[0]
+        num_trajs=estimated_trajectories.shape[0]
         for traj in range(num_trajs):
-            if traj == 0:
-                if grasped > 0.3:
-                    rel_ee_pos = estimated_trajectories[traj][584:587]
-                    rel_rob_pos = estimated_trajectories[traj][580:583]
+            if traj==0:
+                if grasped>0.3:
+                    rel_ee_pos=estimated_trajectories[traj][584:587]
+                    rel_rob_pos=estimated_trajectories[traj][580:583]
                 else:
-                    rel_ee_pos = (
-                        estimated_trajectories[traj][584:587]
-                        - estimated_trajectories[traj][597:600]
-                    )
-                    rel_rob_pos = (
-                        estimated_trajectories[traj][580:583]
-                        - estimated_trajectories[traj][597:600]
-                    )
-                best_rel_ee_pos = rel_ee_pos
-                best_rel_rob_pos = rel_rob_pos
-                best_rel_pos = 0.7 * torch.norm(rel_ee_pos) + 0.3 * torch.norm(
-                    rel_rob_pos
-                )
-                best_idx = 0
+                    rel_ee_pos=estimated_trajectories[traj][584:587] -estimated_trajectories[traj][597:600]
+                    rel_rob_pos=estimated_trajectories[traj][580:583]-estimated_trajectories[traj][597:600]
+                best_rel_ee_pos=rel_ee_pos
+                best_rel_rob_pos=rel_rob_pos
+                best_rel_pos=0.7*torch.norm(rel_ee_pos)+0.3*torch.norm(rel_rob_pos)
+                best_idx=0
             else:
-                if grasped > 0.3:
-                    rel_ee_pos = estimated_trajectories[traj][584:587]
-                    rel_rob_pos = estimated_trajectories[traj][580:583]
+                if grasped>0.3:
+                    rel_ee_pos=estimated_trajectories[traj][584:587]
+                    rel_rob_pos=estimated_trajectories[traj][580:583]
                 else:
-                    rel_ee_pos = (
-                        estimated_trajectories[traj][584:587]
-                        - estimated_trajectories[traj][597:600]
-                    )
-                    rel_rob_pos = (
-                        estimated_trajectories[traj][580:583]
-                        - estimated_trajectories[traj][597:600]
-                    )
-                rel_pos = 0.7 * torch.norm(rel_ee_pos) + 0.3 * torch.norm(
-                    rel_rob_pos
-                )
+                    rel_ee_pos=estimated_trajectories[traj][584:587] -estimated_trajectories[traj][597:600] 
+                    rel_rob_pos=estimated_trajectories[traj][580:583]-estimated_trajectories[traj][597:600]      
+                rel_pos=0.7*torch.norm(rel_ee_pos)+0.3*torch.norm(rel_rob_pos)         
                 if rel_pos < best_rel_pos:
-                    #  best_rel_ee_pos=rel_ee_pos
-                    best_rel_pos = rel_pos
-                    best_idx = traj
-    print("grasped == ", grasped)
-    print("best index == ", best_idx)
-    print("smallest distance == ", torch.norm(best_rel_rob_pos))
-    #   input()
+                  #  best_rel_ee_pos=rel_ee_pos
+                    best_rel_pos=rel_pos
+                    best_idx=traj
+    print("grasped == " , grasped)
+    print("best index == " , best_idx)
+    print("smallest distance == " ,torch.norm(best_rel_rob_pos) )
+ #   input()
 
     return best_idx
 
 
-def imagine_trajectories(
-    env, action_trajectories, gripper_is_grasped, render=True, viewer=None
-):
-    num_trajs = action_trajectories.shape[0]
-    num_actions_per_traj = action_trajectories.shape[1]
-    initial_robot_pos = env.env._env._sim.robot.base_pos
-    initial_robot_ori = env.env._env._sim.robot.base_ori
-    initial_qpos = env.env._env._sim.robot.arm_joint_pos
-    start_state = (np.array(initial_robot_pos), initial_robot_ori)
-    start_state = env.env._env._sim.get_state()
-    gripped = False
+   
+
+def imagine_trajectories(env , action_trajectories,gripper_is_grasped, render=True, viewer=None):
+    num_trajs=action_trajectories.shape[0]
+    num_actions_per_traj=action_trajectories.shape[1]
+    initial_robot_pos=env.env._env._sim.robot.base_pos
+    initial_robot_ori=env.env._env._sim.robot.base_ori
+    initial_qpos=env.env._env._sim.robot.arm_joint_pos
+    start_state=(np.array(initial_robot_pos), initial_robot_ori)
+    start_state=env.env._env._sim.get_state()
+    gripped=False
     for traj in range(num_trajs):
-        # env.env._env.reset_to_given_pose(start_state=start_state,qpos=initial_qpos)
+        #env.env._env.reset_to_given_pose(start_state=start_state,qpos=initial_qpos)
         env.env._env._sim.set_state(start_state)
         for act in range(num_actions_per_traj):
-            action = action_trajectories[traj][act].cpu().numpy()
-            #    print("action == " , action)
-            base_action = action[0:2]
-            arm_action = action[2:9]
-            gripper_action = action[9]
-            step_action = {
-                "action": "BaseArmGripperAction2",
-                "action_args": {
-                    "base_action": (base_action),
-                    "arm_action": (arm_action),
-                    "gripper_action": gripper_action,
-                },
-                "value": 2.9779255390167236,
-            }
-            ob, reward, done, info = env.step(step_action)
+            action=action_trajectories[traj][act].cpu().numpy()
+        #    print("action == " , action)
+            base_action=action[0:2]
+            arm_action=action[2:9]
+            gripper_action=action[9]
+            step_action={'action': 'BaseArmGripperAction2', 'action_args': {'base_action': (base_action) , 'arm_action':(arm_action) , 'gripper_action':gripper_action }, 'value': 2.9779255390167236}
+            ob, reward, done, info=env.step(step_action)
 
             if render:
-                frame = env.render(
-                    "human", overlay_info=False, show_info=False
+                frame = env.render("human",overlay_info=False,show_info=False)
+                key = viewer.imshow(
+                    frame[..., :3], delay=10 
                 )
-                key = viewer.imshow(frame[..., :3], delay=10)
 
-        pick_goal = env.env._env._task.pick_goal
-        place_goal = env.env._env._task.place_goal
-        robot_ee_pos = env.env._env._sim.robot.ee_T.translation
-        rob_base_pos = env.env._env._sim.robot.base_pos
+        pick_goal=env.env._env._task.pick_goal
+        place_goal=env.env._env._task.place_goal         
+        robot_ee_pos=env.env._env._sim.robot.ee_T.translation
+        rob_base_pos=env.env._env._sim.robot.base_pos
 
-        if gripper_is_grasped > 0.5:
-            rel_ee_pos = np.array(robot_ee_pos - place_goal)
-            rel_base_pos = np.array(rob_base_pos - place_goal)
-
+        if gripper_is_grasped>0.5:
+            rel_ee_pos= np.array(robot_ee_pos - place_goal)
+            rel_base_pos=np.array(rob_base_pos-place_goal)
+            
         else:
-            rel_ee_pos = np.array(robot_ee_pos - pick_goal)
-            rel_base_pos = np.array(rob_base_pos - pick_goal)
-        rel_ee_pos = torch.norm(torch.from_numpy(rel_ee_pos))
-        rel_base_pos = torch.norm(torch.from_numpy(rel_base_pos))
-        if traj == 0:
-            best_rel_ee_pos = rel_ee_pos  # +rel_base_pos
-            best_traj = 0
+            rel_ee_pos= np.array(robot_ee_pos - pick_goal)
+            rel_base_pos=np.array(rob_base_pos-pick_goal)
+        rel_ee_pos=torch.norm(torch.from_numpy(rel_ee_pos))
+        rel_base_pos=torch.norm(torch.from_numpy(rel_base_pos))
+        if traj==0:
+            best_rel_ee_pos=rel_ee_pos#+rel_base_pos
+            best_traj=0
         else:
-            # if rel_ee_pos+rel_base_pos< best_rel_ee_pos:
-            if rel_ee_pos < best_rel_ee_pos:
-                best_rel_ee_pos = rel_ee_pos  # +rel_base_pos
-                best_traj = traj
+            #if rel_ee_pos+rel_base_pos< best_rel_ee_pos:
+            if rel_ee_pos< best_rel_ee_pos:
+                best_rel_ee_pos=rel_ee_pos#+rel_base_pos
+                best_traj=traj
 
-        if env.env._env._sim.gripper.is_grasped:
-            gripped = True
+        if env.env._env._sim.gripper.is_grasped :
+            gripped=True
+            
 
         print("finished imagined trajectory number {}".format(traj))
-        print("target index == ", env.env._env._task.tgt_idx)
-        print("grasped == ", gripper_is_grasped)
+        print("target index == " ,env.env._env._task.tgt_idx)
+        print("grasped == " , gripper_is_grasped)
         print("press enter for the next trajectory")
-    #   input()
-    # env.env._env.reset_to_given_pose(start_state=start_state,qpos=initial_qpos)
+     #   input()
+   # env.env._env.reset_to_given_pose(start_state=start_state,qpos=initial_qpos)
     env.env._env._sim.set_state(start_state)
-    return best_traj, gripped
+    return best_traj,gripped
+
 
 
 # Sinusoidal Timestep Embedding
@@ -344,13 +309,9 @@ class SinusoidalPosEmb(nn.Module):
     def forward(self, timesteps):
         device = timesteps.device
         half_dim = self.dim // 2
-        emb = torch.exp(
-            torch.arange(half_dim, device=device)
-            * -(torch.log(torch.tensor(10000.0)) / half_dim)
-        )
+        emb = torch.exp(torch.arange(half_dim, device=device) * -(torch.log(torch.tensor(10000.0)) / half_dim))
         emb = timesteps[:, None] * emb[None, :]
         return torch.cat((emb.sin(), emb.cos()), dim=-1)
-
 
 # Cross-Attention Block
 class CrossAttention(nn.Module):
@@ -358,7 +319,7 @@ class CrossAttention(nn.Module):
         super().__init__()
         inner_dim = heads * dim_head
         self.heads = heads
-        self.scale = dim_head**-0.5
+        self.scale = dim_head ** -0.5
 
         self.to_q = nn.Linear(query_dim, inner_dim, bias=False)
         self.to_k = nn.Linear(context_dim, inner_dim, bias=False)
@@ -373,25 +334,22 @@ class CrossAttention(nn.Module):
         k = self.to_k(context)
         v = self.to_v(context)
 
-        q = rearrange(q, "b n (h d) -> b h n d", h=h)
-        k = rearrange(k, "b n (h d) -> b h n d", h=h)
-        v = rearrange(v, "b n (h d) -> b h n d", h=h)
+        q = rearrange(q, 'b n (h d) -> b h n d', h=h)
+        k = rearrange(k, 'b n (h d) -> b h n d', h=h)
+        v = rearrange(v, 'b n (h d) -> b h n d', h=h)
 
         attn_scores = torch.matmul(q, k.transpose(-1, -2)) * self.scale
         attn = attn_scores.softmax(dim=-1)
 
         out = torch.matmul(attn, v)
-        out = rearrange(out, "b h n d -> b n (h d)")
+        out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
-
 
 # Transformer Block with Cross Attention
 class DiffusionTransformerBlock(nn.Module):
     def __init__(self, dim, cond_dim, heads=8, dim_head=64):
         super().__init__()
-        self.attn = nn.TransformerEncoderLayer(
-            d_model=dim, nhead=heads, batch_first=True
-        )
+        self.attn = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, batch_first=True)
         self.cross_attn = CrossAttention(dim, cond_dim, heads, dim_head)
         self.norm = nn.LayerNorm(dim)
 
@@ -400,42 +358,35 @@ class DiffusionTransformerBlock(nn.Module):
         x = x + self.cross_attn(self.norm(x), cond)
         return x
 
-
 # Conditional Diffusion Model
 class ConditionalDiffusionModel(nn.Module):
-    def __init__(
-        self, cond_dim=406, output_dim=206, hidden_dim=256, num_layers=6
-    ):
+    def __init__(self, cond_dim=406, output_dim=206, hidden_dim=256, num_layers=6):
         super().__init__()
         self.input_proj = nn.Linear(output_dim, hidden_dim)
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.ReLU()
         )
         self.cond_proj = nn.Linear(cond_dim, hidden_dim)
 
-        self.transformer_blocks = nn.ModuleList(
-            [
-                DiffusionTransformerBlock(hidden_dim, hidden_dim)
-                for _ in range(num_layers)
-            ]
-        )
+        self.transformer_blocks = nn.ModuleList([
+            DiffusionTransformerBlock(hidden_dim, hidden_dim) for _ in range(num_layers)
+        ])
 
         self.output_proj = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x, t, cond):
-        x = self.input_proj(x).unsqueeze(1)  # [B, 1, H]
-        t_emb = self.time_mlp(t)  # [B, H]
-        cond = self.cond_proj(cond).unsqueeze(0)  # [B, 1, H]
-        cond = cond.unsqueeze(0)
-        x = x + t_emb.unsqueeze(1)  # add time embedding
+        x = self.input_proj(x).unsqueeze(1)                     # [B, 1, H]
+        t_emb = self.time_mlp(t)                                # [B, H]
+        cond = self.cond_proj(cond).unsqueeze(0)                # [B, 1, H]
+        cond=cond.unsqueeze(0)
+        x = x + t_emb.unsqueeze(1)                              # add time embedding
 
         for block in self.transformer_blocks:
             x = block(x, cond)
 
-        return self.output_proj(x.squeeze(1))  # [B, output_dim]
-
+        return self.output_proj(x.squeeze(1))                   # [B, output_dim]
 
 # Noise Scheduler (like DDPM)
 class NoiseScheduler:
@@ -450,43 +401,31 @@ class NoiseScheduler:
         if noise is None:
             noise = torch.randn_like(x_start)
         sqrt_alpha_cumprod = self.alpha_cumprod[t].sqrt().unsqueeze(1)
-        sqrt_one_minus_alpha_cumprod = (
-            (1.0 - self.alpha_cumprod[t]).sqrt().unsqueeze(1)
-        )
-        return (
-            sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
-        )
+        sqrt_one_minus_alpha_cumprod = (1. - self.alpha_cumprod[t]).sqrt().unsqueeze(1)
+        return sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
 
     def get_loss(self, model, x_start, t, cond):
         noise = torch.randn_like(x_start)
         x_noisy = self.q_sample(x_start, t, noise)
-        predicted_noise = model(
-            x_noisy.to(torch.float64),
-            t.to(torch.float64),
-            cond.to(torch.float64),
-        )
+        predicted_noise = model(x_noisy.to(torch.float64), t.to(torch.float64), cond.to(torch.float64))
         return F.mse_loss(predicted_noise, noise)
+
+
 
 
 # Sampling function
 @torch.no_grad()
-def sample(model, scheduler, cond, steps=500, random_samples=20):
+def sample(model, scheduler, cond, steps=500,random_samples=20):
     model.eval()
     batch_size = random_samples
     x = torch.randn(batch_size, 206).to(cond.device)
-    # x=torch.clamp(x, min=-0.2, max=0.2)
-    # print(x)
-    # input()
+   # x=torch.clamp(x, min=-0.2, max=0.2)
+    #print(x)
+   # input()
     for t in reversed(range(steps)):
-        #    print("in diffusion step == " , t)
-        t_batch = torch.full(
-            (batch_size,), t, dtype=torch.long, device=cond.device
-        )
-        predicted_noise = model(
-            x.to(torch.float64),
-            t_batch.to(torch.float64),
-            cond.to(torch.float64),
-        )
+    #    print("in diffusion step == " , t)
+        t_batch = torch.full((batch_size,), t, dtype=torch.long, device=cond.device)
+        predicted_noise = model(x.to(torch.float64), t_batch.to(torch.float64), cond.to(torch.float64))
 
         alpha = scheduler.alphas[t].to(cond.device)
         alpha_hat = scheduler.alpha_cumprod[t].to(cond.device)
@@ -497,136 +436,104 @@ def sample(model, scheduler, cond, steps=500, random_samples=20):
         else:
             noise = 0
 
-        x = (1 / alpha.sqrt()) * (
-            x - beta / (1 - alpha_hat).sqrt() * predicted_noise
-        ) + beta.sqrt() * noise
+        x = (1 / alpha.sqrt()) * (x - beta / (1 - alpha_hat).sqrt() * predicted_noise) + beta.sqrt() * noise
     return x
 
 
-def extract_actions_from_diff_output(
-    estimated_trajectories, num_predicted_actions=20, act_dim=10, obs_dim=20
-):
-    if len(estimated_trajectories.shape) == 1:
-        num_trajs = 1
-        estimated_trajectories = torch.unsqueeze(estimated_trajectories, dim=0)
+
+
+
+
+def extract_actions_from_diff_output(estimated_trajectories, num_predicted_actions=20 , act_dim=10, obs_dim=20):
+    if len(estimated_trajectories.shape)==1:
+        num_trajs=1
+        estimated_trajectories=torch.unsqueeze(estimated_trajectories,dim=0)
     else:
-        num_trajs = estimated_trajectories.shape[0]
-    extracted_action_trajs = None
+        num_trajs=estimated_trajectories.shape[0]
+    extracted_action_trajs=None
     for traj in range(num_trajs):
-        trajectory = estimated_trajectories[traj]
-        trajectory = torch.tensor(trajectory)
-        actions_traj = None
+        trajectory=estimated_trajectories[traj]
+        trajectory=torch.tensor(trajectory)
+        actions_traj=None
         for act in range(num_predicted_actions):
-            if act == 0:
-                #     print("trajectory[0:act_dim] == " , trajectory)
-                #    print("shape ==  " , trajectory.shape)
-                actions_traj = torch.unsqueeze(trajectory[0:act_dim], dim=0)
+            if act==0:
+           #     print("trajectory[0:act_dim] == " , trajectory)
+            #    print("shape ==  " , trajectory.shape)
+                actions_traj=torch.unsqueeze(trajectory[0:act_dim],dim=0)
             else:
-                actions_traj = torch.cat(
-                    (
-                        actions_traj,
-                        torch.unsqueeze(
-                            trajectory[
-                                act
-                                * (obs_dim + act_dim) : act
-                                * (obs_dim + act_dim)
-                                + act_dim
-                            ],
-                            dim=0,
-                        ),
-                    ),
-                    dim=0,
-                )
-
-        if traj == 0:
-            extracted_action_trajs = torch.unsqueeze(actions_traj, dim=0)
+                actions_traj=torch.cat( (actions_traj, torch.unsqueeze(trajectory[act*(obs_dim+act_dim):act*(obs_dim+act_dim)+act_dim],dim=0) )  , dim=0)
+        
+        if traj==0:
+            extracted_action_trajs=torch.unsqueeze(actions_traj,dim=0)   
         else:
-            extracted_action_trajs = torch.cat(
-                (extracted_action_trajs, torch.unsqueeze(actions_traj, dim=0)),
-                dim=0,
-            )
+            extracted_action_trajs= torch.cat( (extracted_action_trajs , torch.unsqueeze(actions_traj,dim=0))  , dim=0)     
 
-    return extracted_action_trajs
+    return  extracted_action_trajs    
 
 
-def extract_actions_from_diff_output_actions_only(
-    estimated_trajectories, num_predicted_actions=20, act_dim=10, obs_dim=20
-):
 
-    if len(estimated_trajectories.shape) == 1:
-        num_trajs = 1
-        estimated_trajectories = torch.unsqueeze(estimated_trajectories, dim=0)
+
+
+
+def extract_actions_from_diff_output_actions_only(estimated_trajectories, num_predicted_actions=20 , act_dim=10, obs_dim=20):
+
+    if len(estimated_trajectories.shape)==1:
+        num_trajs=1
+        estimated_trajectories=torch.unsqueeze(estimated_trajectories,dim=0)
     else:
-        num_trajs = estimated_trajectories.shape[0]
-    extracted_action_trajs = None
+        num_trajs=estimated_trajectories.shape[0]
+    extracted_action_trajs=None
     for traj in range(num_trajs):
-        trajectory = estimated_trajectories[traj]
-        trajectory = torch.tensor(trajectory)
-        actions_traj = None
+        trajectory=estimated_trajectories[traj]
+        trajectory=torch.tensor(trajectory)
+        actions_traj=None
         for act in range(num_predicted_actions):
-            if act == 0:
-                #     print("trajectory[0:act_dim] == " , trajectory)
-                #    print("shape ==  " , trajectory.shape)
-                actions_traj = torch.unsqueeze(trajectory[0:act_dim], dim=0)
+            if act==0:
+           #     print("trajectory[0:act_dim] == " , trajectory)
+            #    print("shape ==  " , trajectory.shape)
+                actions_traj=torch.unsqueeze(trajectory[0:act_dim],dim=0)
             else:
-                actions_traj = torch.cat(
-                    (
-                        actions_traj,
-                        torch.unsqueeze(
-                            trajectory[
-                                act * (act_dim) : act * (act_dim) + act_dim
-                            ],
-                            dim=0,
-                        ),
-                    ),
-                    dim=0,
-                )
-
-        if traj == 0:
-            extracted_action_trajs = torch.unsqueeze(actions_traj, dim=0)
+                actions_traj=torch.cat( (actions_traj, torch.unsqueeze(trajectory[act*(act_dim):act*(act_dim)+act_dim],dim=0) )  , dim=0)
+        
+        if traj==0:
+            extracted_action_trajs=torch.unsqueeze(actions_traj,dim=0)   
         else:
-            extracted_action_trajs = torch.cat(
-                (extracted_action_trajs, torch.unsqueeze(actions_traj, dim=0)),
-                dim=0,
-            )
+            extracted_action_trajs= torch.cat( (extracted_action_trajs , torch.unsqueeze(actions_traj,dim=0))  , dim=0)     
 
-    return extracted_action_trajs
+    return  extracted_action_trajs    
 
 
-def select_traj_from_last_action(estimated_trajectories, grasped):
-    if len(estimated_trajectories.shape) == 1:
-        num_trajs = 1
-        best_idx = 0
+
+
+def select_traj_from_last_action(estimated_trajectories,grasped):
+    if len(estimated_trajectories.shape)==1:
+        num_trajs=1
+        best_idx=0
     else:
-        num_trajs = estimated_trajectories.shape[0]
+        num_trajs=estimated_trajectories.shape[0]
         for traj in range(num_trajs):
-            if traj == 0:
-                if grasped > 0.3:
-                    rel_ee_pos = estimated_trajectories[traj][200:203]
-                    rel_ee_pos = torch.norm(rel_ee_pos)
+            if traj==0:
+                if grasped>0.3:
+                    rel_ee_pos=estimated_trajectories[traj][200:203]
+                    rel_ee_pos=torch.norm(rel_ee_pos)
                 else:
-                    rel_ee_pos = (
-                        estimated_trajectories[traj][200:203]
-                        - estimated_trajectories[traj][203:206]
-                    )
-                    rel_ee_pos = torch.norm(rel_ee_pos)
-                best_rel_ee_pos = rel_ee_pos
-                best_idx = 0
+                    rel_ee_pos=estimated_trajectories[traj][200:203]-estimated_trajectories[traj][203:206]
+                    rel_ee_pos=torch.norm(rel_ee_pos)
+                best_rel_ee_pos=rel_ee_pos
+                best_idx=0
             else:
-                if grasped > 0.3:
-                    rel_ee_pos = estimated_trajectories[traj][200:203]
-                    rel_ee_pos = torch.norm(rel_ee_pos)
+                if grasped>0.3:
+                    rel_ee_pos=estimated_trajectories[traj][200:203]
+                    rel_ee_pos=torch.norm(rel_ee_pos)
                 else:
-                    rel_ee_pos = (
-                        estimated_trajectories[traj][200:203]
-                        - estimated_trajectories[traj][203:206]
-                    )
-                    rel_ee_pos = torch.norm(rel_ee_pos)
-                if rel_ee_pos < best_rel_ee_pos:
-                    best_rel_ee_pos = rel_ee_pos
-                    best_idx = traj
+                    rel_ee_pos=estimated_trajectories[traj][200:203]-estimated_trajectories[traj][203:206]
+                    rel_ee_pos=torch.norm(rel_ee_pos)    
+                if rel_ee_pos < best_rel_ee_pos :
+                    best_rel_ee_pos=rel_ee_pos
+                    best_idx=traj
 
     return best_idx
+
 
 
 class EarlyFusionRGBDResNet(nn.Module):
@@ -638,31 +545,26 @@ class EarlyFusionRGBDResNet(nn.Module):
 
         # Modify first conv layer to accept 4-channel input
         old_conv1 = base_model.conv1
-        new_conv1 = nn.Conv2d(
-            4, 64, kernel_size=7, stride=2, padding=3, bias=False
-        )
+        new_conv1 = nn.Conv2d(4, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
         with torch.no_grad():
             new_conv1.weight[:, :3, :, :] = old_conv1.weight
-            new_conv1.weight[:, 3:4, :, :] = old_conv1.weight.mean(
-                dim=1, keepdim=True
-            )
+            new_conv1.weight[:, 3:4, :, :] = old_conv1.weight.mean(dim=1, keepdim=True)
 
         base_model.conv1 = new_conv1
 
         # Use the feature extractor part (remove FC layer)
-        self.feature_extractor = nn.Sequential(
-            *list(base_model.children())[:-1]
-        )  # Up to avgpool
+        self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])  # Up to avgpool
 
         # Add a projection layer to change output feature size
         self.projection = nn.Linear(512, output_dim)
 
     def forward(self, rgbd):
-        x = self.feature_extractor(rgbd)  # (B, 512, 1, 1)
-        x = x.view(x.size(0), -1)  # (B, 512)
-        x = self.projection(x)  # (B, output_dim)
+        x = self.feature_extractor(rgbd)       # (B, 512, 1, 1)
+        x = x.view(x.size(0), -1)              # (B, 512)
+        x = self.projection(x)                 # (B, output_dim)
         return x
+
 
 
 class EarlyFusionRGBDResNet_depth_only(nn.Module):
@@ -674,38 +576,29 @@ class EarlyFusionRGBDResNet_depth_only(nn.Module):
 
         # Modify first conv layer to accept 4-channel input
         old_conv1 = base_model.conv1
-        new_conv1 = nn.Conv2d(
-            5, 64, kernel_size=7, stride=2, padding=3, bias=False
-        )
+        new_conv1 = nn.Conv2d(5, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
         with torch.no_grad():
-            new_conv1.weight[:, :3, :, :] = old_conv1.weight.mean(
-                dim=1, keepdim=True
-            )
-            new_conv1.weight[:, 3:5, :, :] = old_conv1.weight.mean(
-                dim=1, keepdim=True
-            )
+            new_conv1.weight[:, :3, :, :] = old_conv1.weight.mean(dim=1, keepdim=True)
+            new_conv1.weight[:, 3:5, :, :] = old_conv1.weight.mean(dim=1, keepdim=True)
 
         base_model.conv1 = new_conv1
 
         # Use the feature extractor part (remove FC layer)
-        self.feature_extractor = nn.Sequential(
-            *list(base_model.children())[:-1]
-        )  # Up to avgpool
+        self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])  # Up to avgpool
 
         # Add a projection layer to change output feature size
         self.projection = nn.Linear(512, output_dim)
 
     def forward(self, rgbd):
-        x = self.feature_extractor(rgbd)  # (B, 512, 1, 1)
-        x = x.view(x.size(0), -1)  # (B, 512)
-        x = self.projection(x)  # (B, output_dim)
+        x = self.feature_extractor(rgbd)       # (B, 512, 1, 1)
+        x = x.view(x.size(0), -1)              # (B, 512)
+        x = self.projection(x)                 # (B, output_dim)
         return x
 
 
-def build_mlp(
-    input_size=790, output_size=300, hidden_layers=5, activation=nn.ReLU
-):
+
+def build_mlp(input_size=790, output_size=300, hidden_layers=5, activation=nn.ReLU):
     """
     Builds an MLP with given input/output size and number of hidden layers.
     The hidden layer sizes decrease linearly from input_size to output_size.
@@ -715,14 +608,15 @@ def build_mlp(
     """
     # Compute intermediate hidden layer sizes
     sizes = np.linspace(input_size, output_size, hidden_layers + 1).astype(int)
-
+    
     layers = []
     for i in range(hidden_layers):
-        layers.append(nn.Linear(sizes[i], sizes[i + 1]))
+        layers.append(nn.Linear(sizes[i], sizes[i+1]))
         if i < hidden_layers - 1:
             layers.append(activation())
 
     return nn.Sequential(*layers)
+
 
 
 @baseline_registry.register_trainer(name="ppo-v0")
@@ -741,8 +635,9 @@ class PPOTrainerV0(BaseTrainer):
     def __init__(self, config: Config):
         self.config = config
 
-    # print("in the ppo trainer")
-    # input()
+       # print("in the ppo trainer")
+        #input()
+
 
     def is_done(self):
         return self.num_steps_done >= self.config.TOTAL_NUM_STEPS
@@ -819,11 +714,12 @@ class PPOTrainerV0(BaseTrainer):
 
         with self.timer.timeit("sample_action"):
             step_batch = self.rollouts.buffers[self.rollouts.step_idx]
-            #     print("step batch obs== ", step_batch)
+       #     print("step batch obs== ", step_batch)
             # Assume that observations are stored at rollouts in the last step
             output_batch = self.actor_critic.act(step_batch)
             actions = output_batch["action"]
             actions = actions.to(device="cpu", non_blocking=True)
+
 
         with self.timer.timeit("step_env"):
             for i_env, action in zip(range(n_envs), actions.unbind(0)):
@@ -841,12 +737,12 @@ class PPOTrainerV0(BaseTrainer):
 
         with self.timer.timeit("step_env"):
             results = self.envs.wait_step()
-            #   print("results == " , results)
-            #  input()
+         #   print("results == " , results)
+          #  input()
             obs, rews, dones, infos = map(list, zip(*results))
             self.num_steps_done += n_envs
 
-        # self.envs.render("human", delay=10)
+       # self.envs.render("human", delay=10)
 
         # -------------------------------------------------------------------------- #
         # Reset and deal with truncated episodes
@@ -1228,6 +1124,7 @@ class PPOTrainerV0(BaseTrainer):
             logger.info("Load checkpoint from {}".format(ckpt_path))
             self.actor_critic.load_state_dict(ckpt_dict["state_dict"])
 
+
     def _setup_rollouts(self, config: Config):
         ppo_cfg = config.RL.PPO
         self.rollouts = RolloutStorage(
@@ -1352,8 +1249,8 @@ class PPOTrainerV0(BaseTrainer):
         else:
             ckpt_path = get_latest_checkpoint(
                 self.config.CHECKPOINT_FOLDER, True
-            )
-            ###  this function finds the latest check-point in the folder
+            ) 
+             ###  this function finds the latest check-point in the folder 
         assert os.path.isfile(ckpt_path), ckpt_path
         ckpt_id = get_checkpoint_id(ckpt_path)
         if ckpt_id is None:
@@ -1374,13 +1271,17 @@ class PPOTrainerV0(BaseTrainer):
         # Map location CPU is almost always better than mapping to a CUDA device.
         logger.info(f"Loaded {checkpoint_path}")
         ckpt_dict = torch.load(checkpoint_path, map_location="cpu")
-        #   print("check point dict == " , ckpt_dict)
-        #  input()
+     #   print("check point dict == " , ckpt_dict)
+      #  input()
         config = self.config.clone()
+
+        
 
         config.defrost()
 
         config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
+        
+
 
         config.freeze()
 
@@ -1392,19 +1293,19 @@ class PPOTrainerV0(BaseTrainer):
             get_env_class(config.ENV_NAME),
             wrappers=[HabitatActionWrapper],
         )
-
-        # print(" config == ", config)
-        # input()
+        
+       # print(" config == ", config)
+       # input()
 
         self.envs = [env]  ###here it is a single env
         self._init_observation_space(config)
         self._init_action_space(config)
         self._setup_actor_critic(config)
         self.actor_critic.load_state_dict(ckpt_dict["state_dict"])
-        #   print(self.actor_critic.net.visual_encoder)
-        #    PATH='/home/shokry/hab-mobile-manipulation/rl_trained_encoder/visual_encoder_nav_17_sept.pth'
-        #   torch.save(self.actor_critic.net.visual_encoder.state_dict(), PATH)
-        #  input()
+     #   print(self.actor_critic.net.visual_encoder)
+    #    PATH='/home/shokry/hab-mobile-manipulation/rl_trained_encoder/visual_encoder_nav_17_sept.pth'
+     #   torch.save(self.actor_critic.net.visual_encoder.state_dict(), PATH)
+      #  input()
         self.actor_critic.eval()
 
         ### check the action space in config
@@ -1420,14 +1321,14 @@ class PPOTrainerV0(BaseTrainer):
         failure_episodes = []
 
         # Initialize policy inputs
-        #    env.current_episode.episode_id=0
-        #  print("config == " , config)
-        #   print("env.current_episode.episode_id == " , env.current_episode.episode_id )
-        #   input()
+    #    env.current_episode.episode_id=0
+      #  print("config == " , config)
+     #   print("env.current_episode.episode_id == " , env.current_episode.episode_id )
+     #   input()
 
         obs = env.reset()
-        # print("observation == ", obs)
-        # input()
+        #print("observation == ", obs)
+        #input()
         self._obs_batching_cache = ObservationBatchingCache()
         batch = batch_obs(
             [obs], device=self.device, cache=self._obs_batching_cache
@@ -1453,355 +1354,265 @@ class PPOTrainerV0(BaseTrainer):
             ),
         )
 
+
         metrics = {}
-
-        prev_actions = torch.zeros(
-            1, *self.action_space.shape, device=self.device, dtype=torch.float
-        )
-        if len(prev_actions.shape) == 1:
-            prev_actions = torch.unsqueeze(prev_actions, dim=0)
+        
+        prev_actions=torch.zeros(1,*self.action_space.shape,device=self.device,dtype=torch.float)
+        if len(prev_actions.shape)==1:
+            prev_actions=torch.unsqueeze(prev_actions,dim=0)
         pbar = tqdm.tqdm(total=num_eval_episodes)
+        
+        saved_eps=0
 
-        saved_eps = 0
+        rel_rob_pos_temp= np.array([]) 
+        rob_ori_temp= np.array([])
+        rel_ee_pos_temp= np.array([])
+        rob_qpos_temp=np.array([])
+        rob_base_lin_vel_temp=np.array([])
+        rob_base_ang_vel_temp=np.array([])
+        rob_grasped_temp=np.array([])
+        pick_pos_temp= np.array([])
+        robot_head_rgb_temp=np.array([[[]]])
+        robot_head_depth_temp=np.array([])
+        robot_arm_rgb_temp=np.array([[[]]])
+        robot_arm_depth_temp=np.array([])
+        prev_actions_temp=np.array([])
+        current_actions_temp=np.array([])
+        action_to_save_temp=np.array([])
+        num_suc_episodes=0            
+        dataset_dict={}
+        
+        current_step=0
+        
+        actions_till_now=[]
+        episode_ids=[]
+        
 
-        rel_rob_pos_temp = np.array([])
-        rob_ori_temp = np.array([])
-        rel_ee_pos_temp = np.array([])
-        rob_qpos_temp = np.array([])
-        rob_base_lin_vel_temp = np.array([])
-        rob_base_ang_vel_temp = np.array([])
-        rob_grasped_temp = np.array([])
-        pick_pos_temp = np.array([])
-        robot_head_rgb_temp = np.array([[[]]])
-        robot_head_depth_temp = np.array([])
-        robot_arm_rgb_temp = np.array([[[]]])
-        robot_arm_depth_temp = np.array([])
-        prev_actions_temp = np.array([])
-        current_actions_temp = np.array([])
-        action_to_save_temp = np.array([])
-        num_suc_episodes = 0
-        dataset_dict = {}
+        total_episodes=0
+        total_steps=0
+        hi=0
+        saves=0
 
-        current_step = 0
 
-        actions_till_now = []
-        episode_ids = []
+        num_prev_obs=5
+        conditions_dimensionality=28
+        choose_diffusion=False
+        depth_only=False
+        viewer_=False
+        rl_encoder=False
+        
 
-        total_episodes = 0
-        total_steps = 0
-        hi = 0
-        saves = 0
-
-        num_prev_obs = 5
-        conditions_dimensionality = 28
-        choose_diffusion = False
-        depth_only = False
-        viewer_ = False
-        rl_encoder = False
 
         if viewer_:
             viewer = OpenCVViewer(config.TASK_CONFIG.TASK.TYPE)
 
+
         if depth_only:
-            #  save_dir='/home/shokry/hab-mobile-manipulation/diffusion/weights'
-            save_dir = "./diffusion_dataset_new/weights_pick_ep5_seed300"
-            diffusion_model = (
-                ConditionalDiffusionModel().to(device).to(torch.float64)
-            )
-            # diffusion_model.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/diff_transformer_weights/context_model_30000.pth", map_location=device))
-            # diffusion_model.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/model_generate_actions_last_state_all_tasks_lr1_trgt_idx_1_epoch_2010.pth", map_location=device))
-            #   diffusion_model.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/model_generate_actions_last_state_all_tasks_lr1_trgt_idx_1_epoch_950.pth", map_location=device))
+          #  save_dir='/home/shokry/hab-mobile-manipulation/diffusion/weights'
+            save_dir='/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/weights_pick_ep5_seed300'
+            diffusion_model = ConditionalDiffusionModel().to(device).to(torch.float64)
+        #diffusion_model.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/diff_transformer_weights/context_model_30000.pth", map_location=device))
+           # diffusion_model.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/model_generate_actions_last_state_all_tasks_lr1_trgt_idx_1_epoch_2010.pth", map_location=device))
+         #   diffusion_model.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/model_generate_actions_last_state_all_tasks_lr1_trgt_idx_1_epoch_950.pth", map_location=device))
 
             scheduler = NoiseScheduler(timesteps=500)
             diffusion_model.eval()
 
+
             mlp = build_mlp(input_size=406, output_size=600, hidden_layers=5)
-            #  mlp.load_state_dict(torch.load(f"{save_dir}/pick_only_small_model_120000.pth", map_location=device)) #120000 is good
+          #  mlp.load_state_dict(torch.load(f"{save_dir}/pick_only_small_model_120000.pth", map_location=device)) #120000 is good
             mlp.to(device)
 
             model = EarlyFusionRGBDResNet_depth_only()
             model.eval()
 
+
+
         else:
-            save_dir = "./mlp_models/weights"
+            save_dir='/home/shokry/hab-mobile-manipulation/mlp_models/weights'
             mlp = build_mlp(input_size=406, output_size=600, hidden_layers=5)
-            #    mlp.load_state_dict(torch.load(f"{save_dir}/model_50.pth", map_location=device))
+        #    mlp.load_state_dict(torch.load(f"{save_dir}/model_50.pth", map_location=device))
             mlp.to(device)
 
             model = EarlyFusionRGBDResNet()
             model.eval()
 
-        print("num_eval_episodes == ", num_eval_episodes)
-        # print("press enter to continue")
-        #   input()
+
+
+
+        print("num_eval_episodes == " , num_eval_episodes)
+       # print("press enter to continue")
+     #   input()
         while len(all_episode_stats) < num_eval_episodes:
-            total_steps += 1
-            placed = False
+            total_steps+=1
+            placed=False
             if len(config.VIDEO_OPTION) > 0:
-                #   print("in if len(config.VIDEO_OPTION) > 0: ")
+             #   print("in if len(config.VIDEO_OPTION) > 0: ")
                 rgb_frames.append(env.render("human", info=metrics))
-            #  print("finished if len(config.VIDEO_OPTION) > 0: ")
+              #  print("finished if len(config.VIDEO_OPTION) > 0: ")
             with torch.no_grad():
-                # print("in with torch.no_grad() ")
+               # print("in with torch.no_grad() ")                
                 step_batch = dict(observations=batch, **buffer)
                 outputs_batch = self.actor_critic.act(
-                    step_batch,
-                    deterministic=False,  # config.EVAL.DETERMINISTIC_ACTION
+                    step_batch, deterministic=False#config.EVAL.DETERMINISTIC_ACTION
                 )
                 actions = outputs_batch["action"]
-                gripper_is_grasped = env.env._env._sim.gripper.is_grasped
+                gripper_is_grasped= env.env._env._sim.gripper.is_grasped 	
 
-                # print("action by policy == " , actions)
+               # print("action by policy == " , actions)
                 if actions.shape[-1] == 1:
-
+                    
                     self.possible_velocities = np.array(
-                        [
-                            [lin_vel, ang_vel]
-                            for lin_vel in np.linspace(-0.5, 1.0, 4)
-                            for ang_vel in np.linspace(-1.0, 1.0, 5)
-                        ]
+                    [
+                        [lin_vel, ang_vel]
+                        for lin_vel in np.linspace(-0.5, 1.0, 4)
+                        for ang_vel in np.linspace(-1.0, 1.0, 5)
+                    ]
                     )
-                    current_velocity = self.possible_velocities[actions]
+                    current_velocity=self.possible_velocities[actions]
                     if gripper_is_grasped:
-                        action_to_save = torch.tensor(
-                            [
-                                [
-                                    current_velocity[0] * 1.5,
-                                    current_velocity[1] * 1.5,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    1,
-                                ]
-                            ]
-                        )
+                        action_to_save=torch.tensor([[current_velocity[0]*1.5 , current_velocity[1]*1.5 , 0 , 0, 0 ,0 , 0 ,0 ,0 , 1 ]])
 
                     else:
-                        action_to_save = torch.tensor(
-                            [
-                                [
-                                    current_velocity[0] * 1.5,
-                                    current_velocity[1] * 1.5,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    -1,
-                                ]
-                            ]
-                        )  ## the gripper action should be -1
-                # print("current_velocity == " , current_velocity)
+                        action_to_save=torch.tensor([[current_velocity[0]*1.5 , current_velocity[1]*1.5  , 0 , 0, 0 ,0 , 0 ,0 ,0 , -1 ]]) ## the gripper action should be -1
+                   # print("current_velocity == " , current_velocity)
                 else:
-                    action_to_save = torch.clamp(actions, min=-1, max=1)
-                    action_to_save[:, 0:2] *= 1.5
+                    action_to_save=torch.clamp(actions, min=-1, max=1)
+                    action_to_save[:, 0:2]*=1.5
+ 
 
-            robot_base_pos = env.env._env._sim.robot.base_pos
-            robot_base_orientation = env.env._env._sim.robot.base_ori
-            robot_qpos = env.env._env._sim.robot.arm_joint_pos
-            # robot_ee_T= env.env._env._sim.robot.ee_T
-            robot_ee_pos = env.env._env._sim.robot.ee_T.translation
+            
 
-            gripper_is_grasped = env.env._env._sim.gripper.is_grasped
+            robot_base_pos= env.env._env._sim.robot.base_pos
+            robot_base_orientation= env.env._env._sim.robot.base_ori
+            robot_qpos= env.env._env._sim.robot.arm_joint_pos 	
+           # robot_ee_T= env.env._env._sim.robot.ee_T 	
+            robot_ee_pos=env.env._env._sim.robot.ee_T.translation
+        
+            gripper_is_grasped= env.env._env._sim.gripper.is_grasped 	
             if gripper_is_grasped:
-                grasped = 1
+            	grasped=1
             else:
-                grasped = -1
+            	grasped=-1
 
-            episode = env.env._env._sim.habitat_config.EPISODE
+            episode=env.env._env._sim.habitat_config.EPISODE
 
-            pick_goal = env.env._env._task.pick_goal
-            place_goal = env.env._env._task.place_goal
+            pick_goal=   env.env._env._task.pick_goal    
+            place_goal=   env.env._env._task.place_goal    
 
-            robot_head_rgb = step_batch["observations"]["robot_head_rgb"][0]
-            robot_arm_rgb = step_batch["observations"]["robot_arm_rgb"][0]
+            robot_head_rgb = step_batch['observations']['robot_head_rgb'][0]
+            robot_arm_rgb = step_batch['observations']['robot_arm_rgb'][0]
+            
+            robot_head_depth = step_batch['observations']['robot_head_depth'][0]
 
-            robot_head_depth = step_batch["observations"]["robot_head_depth"][
-                0
-            ]
-
-            robot_arm_depth = step_batch["observations"]["robot_arm_depth"][0]
+            robot_arm_depth = step_batch['observations']['robot_arm_depth'][0]
 
             if current_step == 0:
-                print("robot_base_pos == ", robot_base_pos)
+                print("robot_base_pos == " , robot_base_pos)
             #    input()
 
-            rel_rob_pos = np.array(robot_base_pos - place_goal)
-            rob_ori = np.array([robot_base_orientation])
-            rel_ee_pos = np.array(robot_ee_pos - place_goal)
-            rob_qpos = np.array(robot_qpos)
-            rob_grasped = np.array([grasped])
-            pick_pos = np.array(pick_goal - place_goal)
 
-            robot_head_rgb = robot_head_rgb.cpu().numpy()
-            robot_head_depth = robot_head_depth.cpu().numpy()
-            robot_arm_rgb = robot_arm_rgb.cpu().numpy()
-            robot_arm_depth = robot_arm_depth.cpu().numpy()
-            action_to_save = action_to_save.cpu().numpy().squeeze(0)
+            rel_rob_pos= np.array(robot_base_pos - place_goal) 
+            rob_ori= np.array([robot_base_orientation])
+            rel_ee_pos= np.array(robot_ee_pos - place_goal)
+            rob_qpos= np.array(robot_qpos)
+            rob_grasped=np.array([grasped])
+            pick_pos= np.array(pick_goal - place_goal)
 
+            robot_head_rgb=robot_head_rgb.cpu().numpy()
+            robot_head_depth=robot_head_depth.cpu().numpy()
+            robot_arm_rgb=robot_arm_rgb.cpu().numpy()
+            robot_arm_depth=robot_arm_depth.cpu().numpy()
+            action_to_save=action_to_save.cpu().numpy().squeeze(0)
+
+            
+            
             if current_step == 0:
-
-                rel_rob_pos_temp = [rel_rob_pos]
-                rob_ori_temp = [rob_ori]
-                rel_ee_pos_temp = [rel_ee_pos]
-                rob_qpos_temp = [rob_qpos]
-                rob_grasped_temp = [rob_grasped]
-                pick_pos_temp = [pick_pos]
-                robot_head_depth_temp = [robot_head_depth]
-                robot_arm_depth_temp = [robot_arm_depth]
-                action_to_save_temp = [
-                    action_to_save
-                ]  # .cpu().numpy()] #########################
-
+                        
+                rel_rob_pos_temp=[rel_rob_pos]
+                rob_ori_temp=[rob_ori]
+                rel_ee_pos_temp=[rel_ee_pos]
+                rob_qpos_temp=[rob_qpos]
+                rob_grasped_temp=[rob_grasped]
+                pick_pos_temp=[pick_pos]
+                robot_head_depth_temp=[robot_head_depth]
+                robot_arm_depth_temp=[robot_arm_depth]
+                action_to_save_temp=[action_to_save]#.cpu().numpy()] #########################
+            
+                        
             else:
-                rel_rob_pos_temp = np.append(
-                    rel_rob_pos_temp, [rel_rob_pos], axis=0
-                )
-                rob_ori_temp = np.append(rob_ori_temp, [rob_ori], axis=0)
-                rel_ee_pos_temp = np.append(
-                    rel_ee_pos_temp, [rel_ee_pos], axis=0
-                )
-                rob_qpos_temp = np.append(rob_qpos_temp, [rob_qpos], axis=0)
-                rob_grasped_temp = np.append(
-                    rob_grasped_temp, [rob_grasped], axis=0
-                )
-                pick_pos_temp = np.append(pick_pos_temp, [pick_pos], axis=0)
-                robot_head_depth_temp = np.append(
-                    robot_head_depth_temp, [robot_head_depth], axis=0
-                )
-                robot_arm_depth_temp = np.append(
-                    robot_arm_depth_temp, [robot_arm_depth], axis=0
-                )
-                action_to_save_temp = np.append(
-                    action_to_save_temp, [action_to_save], axis=0
-                )  ######################
+                rel_rob_pos_temp = np.append( rel_rob_pos_temp,[rel_rob_pos],axis=0)
+                rob_ori_temp = np.append(rob_ori_temp,[rob_ori],axis=0)
+                rel_ee_pos_temp = np.append(rel_ee_pos_temp,[rel_ee_pos],axis=0)
+                rob_qpos_temp = np.append(rob_qpos_temp,[rob_qpos],axis=0)
+                rob_grasped_temp= np.append(rob_grasped_temp,[rob_grasped],axis=0)
+                pick_pos_temp= np.append(pick_pos_temp,[pick_pos],axis=0)
+                robot_head_depth_temp= np.append(robot_head_depth_temp,[robot_head_depth],axis=0)
+                robot_arm_depth_temp= np.append(robot_arm_depth_temp,[robot_arm_depth],axis=0)
+                action_to_save_temp= np.append(action_to_save_temp,[action_to_save],axis=0)######################
 
-            #   print("actions to save== " , action_to_save_temp)
-            #   print("actions to save== " , len(action_to_save_temp))
-            # print("actions to save last shape == " , action_to_save_temp[len(action_to_save_temp-1)].shape)
-            #   input()
-
+         #   print("actions to save== " , action_to_save_temp)
+         #   print("actions to save== " , len(action_to_save_temp))
+           # print("actions to save last shape == " , action_to_save_temp[len(action_to_save_temp-1)].shape)
+         #   input()      
+        
+    
             if choose_diffusion:
 
-                state = np.concatenate(
-                    (rel_rob_pos, rob_ori, rel_ee_pos, rob_grasped, pick_pos),
-                    axis=-1,
-                )
-                #  print("prev_actions == " , prev_actions)
-                # print("state == " , state)
-                condition = np.concatenate((state, action_to_save), axis=-1)
-                rgbd_head = torch.cat(
-                    (
-                        torch.from_numpy(robot_head_rgb).permute(2, 0, 1),
-                        torch.from_numpy(robot_head_depth).permute(2, 0, 1),
-                    ),
-                    dim=0,
-                )
-                rgbd_arm = torch.cat(
-                    (
-                        torch.from_numpy(robot_arm_rgb).permute(2, 0, 1),
-                        torch.from_numpy(robot_arm_depth).permute(2, 0, 1),
-                    ),
-                    dim=0,
-                )
-                #  print("rgbd_head shape == " , rgbd_head.shape)
-                #  input()
+                state=np.concatenate((rel_rob_pos, rob_ori , rel_ee_pos,  rob_grasped, pick_pos  ), axis=-1)
+            #  print("prev_actions == " , prev_actions)
+            # print("state == " , state)
+                condition=np.concatenate(( state,action_to_save), axis=-1)
+                rgbd_head=torch.cat((torch.from_numpy(robot_head_rgb).permute(2, 0, 1),torch.from_numpy(robot_head_depth).permute(2, 0, 1)), dim=0)
+                rgbd_arm=torch.cat((torch.from_numpy(robot_arm_rgb).permute(2, 0, 1),torch.from_numpy(robot_arm_depth).permute(2, 0, 1)), dim=0)
+            #  print("rgbd_head shape == " , rgbd_head.shape)
+            #  input()
 
-                if current_step == 0:
-                    conditions = torch.from_numpy(condition)
-                    rgbd_head_seq = torch.unsqueeze(rgbd_head, dim=0)
-                    rgbd_arm_seq = torch.unsqueeze(rgbd_arm, dim=0)
-                    depth_only_head_seq = torch.unsqueeze(
-                        torch.from_numpy(robot_head_depth).permute(2, 0, 1),
-                        dim=0,
-                    )
-                    depth_only_arm_seq = torch.unsqueeze(
-                        torch.from_numpy(robot_arm_depth).permute(2, 0, 1),
-                        dim=0,
-                    )
+
+                if current_step==0:
+                    conditions=torch.from_numpy(condition)
+                    rgbd_head_seq=torch.unsqueeze(rgbd_head,dim=0)
+                    rgbd_arm_seq=torch.unsqueeze(rgbd_arm,dim=0)
+                    depth_only_head_seq=torch.unsqueeze(torch.from_numpy(robot_head_depth).permute(2, 0, 1),dim=0)
+                    depth_only_arm_seq=torch.unsqueeze(torch.from_numpy(robot_arm_depth).permute(2, 0, 1),dim=0)
                 else:
-                    conditions = torch.cat(
-                        (conditions, torch.from_numpy(condition)), 0
-                    )
-
-                    rgbd_head_seq = torch.cat(
-                        (rgbd_head_seq, torch.unsqueeze(rgbd_head, dim=0)),
-                        dim=0,
-                    )
-                    rgbd_arm_seq = torch.cat(
-                        (rgbd_arm_seq, torch.unsqueeze(rgbd_arm, dim=0)), dim=0
-                    )
-                    depth_only_head_seq = torch.cat(
-                        (
-                            depth_only_head_seq,
-                            torch.unsqueeze(
-                                torch.from_numpy(robot_head_depth).permute(
-                                    2, 0, 1
-                                ),
-                                dim=0,
-                            ),
-                        ),
-                        dim=0,
-                    )
-                    depth_only_arm_seq = torch.cat(
-                        (
-                            depth_only_arm_seq,
-                            torch.unsqueeze(
-                                torch.from_numpy(robot_arm_depth).permute(
-                                    2, 0, 1
-                                ),
-                                dim=0,
-                            ),
-                        ),
-                        dim=0,
-                    )
-                    if current_step >= num_prev_obs:
-                        #   print("conditions before == ",conditions )
-                        conditions = conditions[
-                            -(num_prev_obs * conditions_dimensionality) :
-                        ]
-                        #       print("conditions shape == " , conditions.shape )
-                        rgbd_head_seq = rgbd_head_seq[-num_prev_obs:]
-                        rgbd_arm_seq = rgbd_arm_seq[-num_prev_obs:]
-                        #    print("rgbd_head_seq after == " , rgbd_head_seq.shape)
-                        depth_only_head_seq = depth_only_head_seq[
-                            -num_prev_obs:
-                        ]
-                        depth_only_arm_seq = depth_only_arm_seq[-num_prev_obs:]
+                    conditions=torch.cat((conditions,torch.from_numpy(condition)),0)
+                    
+                    rgbd_head_seq=torch.cat((rgbd_head_seq, torch.unsqueeze(rgbd_head,dim=0)) , dim=0)
+                    rgbd_arm_seq=torch.cat((rgbd_arm_seq, torch.unsqueeze(rgbd_arm,dim=0)) , dim=0)
+                    depth_only_head_seq=torch.cat((depth_only_head_seq, torch.unsqueeze(torch.from_numpy(robot_head_depth).permute(2, 0, 1),dim=0)) , dim=0)
+                    depth_only_arm_seq=torch.cat((depth_only_arm_seq, torch.unsqueeze(torch.from_numpy(robot_arm_depth).permute(2, 0, 1),dim=0)) , dim=0)
+                    if current_step>=num_prev_obs:
+                    #   print("conditions before == ",conditions )
+                        conditions=conditions[-(num_prev_obs*conditions_dimensionality):]
+                #       print("conditions shape == " , conditions.shape )
+                        rgbd_head_seq=rgbd_head_seq[-num_prev_obs : ]
+                        rgbd_arm_seq=rgbd_arm_seq[-num_prev_obs : ]
+                    #    print("rgbd_head_seq after == " , rgbd_head_seq.shape)
+                        depth_only_head_seq=depth_only_head_seq[-num_prev_obs : ]
+                        depth_only_arm_seq=depth_only_arm_seq[-num_prev_obs : ]
                     #   print("depth_only_head_seq after == " , depth_only_head_seq.shape)
                     #  input()
+                        
 
-            gripped = False
+
+
+
+
+            gripped=False
             if choose_diffusion:
 
                 if current_step < num_prev_obs:
-                    step_action = {
-                        "action": "BaseArmGripperAction2",
-                        "action_args": {
-                            "base_action": (0, 0),
-                            "arm_action": (0, 0, 0, 0, 0, 0, 0),
-                            "gripper_action": 1,
-                        },
-                        "value": 2.9779255390167236,
-                    }
-                    ob, reward, done, info = env.step(step_action)
-                    # current_step+=1
-                    estimated_action_trajs = None
-                else:  # imagine_trajectories
+                    step_action={'action': 'BaseArmGripperAction2', 'action_args': {'base_action': (0,0) , 'arm_action':(0,0,0,0,0,0,0) , 'gripper_action':1 }, 'value': 2.9779255390167236}
+                    ob, reward, done, info=env.step(step_action)
+                    #current_step+=1
+                    estimated_action_trajs=None
+                else: #imagine_trajectories
 
-                    if (current_step - num_prev_obs) % 20 == 0:
-                        print(
-                            "Generating action trajectories, current step == ",
-                            current_step,
-                        )
+                    if (current_step-num_prev_obs)%20 == 0:
+                        print("Generating action trajectories, current step == ",current_step)
 
-                        """
+                        '''
                         samples, intermediate=sample_ddpm_context(10, conditions, save_rate=20)
                         estimated_trajs=None
                         for sample in range(samples.shape[0]):
@@ -1811,167 +1622,117 @@ class PPOTrainerV0(BaseTrainer):
                             else:
                                 estimated_trajs=np.concatenate((estimated_trajs, np.expand_dims(estimated_traj,0)), axis=0)
                         
-                        """
+                        '''
+
 
                         if depth_only:
                             with torch.no_grad():
-                                rgbd_head_features = model(
-                                    torch.unsqueeze(
-                                        torch.reshape(
-                                            depth_only_head_seq,
-                                            (num_prev_obs, 128, 128),
-                                        ),
-                                        dim=0,
-                                    )
-                                )
-                                rgbd_arm_features = model(
-                                    torch.unsqueeze(
-                                        torch.reshape(
-                                            depth_only_arm_seq,
-                                            (num_prev_obs, 128, 128),
-                                        ),
-                                        dim=0,
-                                    )
-                                )
-                                features_head_squeezed = torch.squeeze(
-                                    torch.reshape(rgbd_head_features, (1, -1))
-                                ).to(device)
-                                features_arm_squeezed = torch.squeeze(
-                                    torch.reshape(rgbd_arm_features, (1, -1))
-                                ).to(device)
-                                network_input = torch.cat(
-                                    (
-                                        conditions.to(device),
-                                        features_head_squeezed,
-                                        features_arm_squeezed,
-                                    ),
-                                    dim=0,
-                                ).to(device)
+                                rgbd_head_features=model(torch.unsqueeze(torch.reshape(depth_only_head_seq,(num_prev_obs,128,128)),dim=0))
+                                rgbd_arm_features=model(torch.unsqueeze(torch.reshape(depth_only_arm_seq,(num_prev_obs,128,128)),dim=0))
+                                features_head_squeezed=torch.squeeze(torch.reshape(rgbd_head_features,(1,-1))).to(device)
+                                features_arm_squeezed=torch.squeeze(torch.reshape(rgbd_arm_features,(1,-1))).to(device)
+                                network_input=torch.cat((conditions.to(device),features_head_squeezed,features_arm_squeezed),dim=0).to(device)
                         else:
                             with torch.no_grad():
-                                rgbd_head_features = model(rgbd_head_seq)
-                                rgbd_arm_features = model(rgbd_arm_seq)
-                                features_head_squeezed = torch.squeeze(
-                                    torch.reshape(rgbd_head_features, (1, -1))
-                                ).to(device)
-                                features_arm_squeezed = torch.squeeze(
-                                    torch.reshape(rgbd_arm_features, (1, -1))
-                                ).to(device)
-                                network_input = torch.cat(
-                                    (
-                                        conditions.to(device),
-                                        features_head_squeezed,
-                                    ),
-                                    dim=0,
-                                ).to(device)
+                                rgbd_head_features=model(rgbd_head_seq)
+                                rgbd_arm_features=model(rgbd_arm_seq)
+                                features_head_squeezed=torch.squeeze(torch.reshape(rgbd_head_features,(1,-1))).to(device)
+                                features_arm_squeezed=torch.squeeze(torch.reshape(rgbd_arm_features,(1,-1))).to(device)
+                                network_input=torch.cat((conditions.to(device),features_head_squeezed),dim=0).to(device)
 
-                        print("network input shape == ", network_input.shape)
-                        # mlp.float()
-                        ## estimated_trajs=mlp(network_input.float())
-                        # cond=network_input
-                        diff_output = sample(
-                            diffusion_model, scheduler, network_input
-                        )
-                        similarity = cosine_similarity_matrix_torch(
-                            diff_output
-                        )
+                        print("network input shape == " , network_input.shape )
+                       # mlp.float()
+                       ## estimated_trajs=mlp(network_input.float())
+                        #cond=network_input
+                        diff_output = sample(diffusion_model, scheduler, network_input)
+                        similarity = cosine_similarity_matrix_torch(diff_output)
                         print("Cosine Similarity Matrix (PyTorch):")
                         for i in range(similarity.shape[0]):
                             print(similarity[i])
-                        estimated_trajs = diff_output[:, :200]
-                        last_states = diff_output[:, 200:206]
+                        estimated_trajs=diff_output[:,:200]
+                        last_states=diff_output[:,200:206]
 
-                        # diff_output = diff_output / (diff_output.norm(dim=1, keepdim=True) + 1e-8)
-                        # labels = cluster_with_dbscan(diff_output, eps=1.0, min_samples=10)
-                        # output_vectors = torch.randn(500, 206)  # Your diffusion model output
-                        #   labels, centers, best_k = auto_kmeans_cluster(diff_output, max_k=12)
-                        #  print("labels == " , labels)
-                        # print("K == " , best_k)
 
-                        #  print("estimated trajectories shape == ", estimated_trajs.shape)
-                        # input()
-                        # extracted_action_trajs=extract_actions_from_diff_output(estimated_trajs)
-                        extracted_action_trajs = (
-                            extract_actions_from_diff_output_actions_only(
-                                estimated_trajs
-                            )
-                        )
-                        #  print("extracted_action_trajs shape == " , extracted_action_trajs.shape)
-                        #    estimated_action_trajs=torch.squeeze(extracted_action_trajs)
-                        # best_traj_index=choose_best_traj(estimated_trajs,grasped=rob_grasped)
-                        best_traj_index, gripped = imagine_trajectories(
-                            env,
-                            extracted_action_trajs,
-                            gripper_is_grasped,
-                            render=True,
-                            viewer=viewer,
-                        )
-                        #  best_traj_index=random.randint(0, estimated_trajs.shape[0]-1)
-                        #  best_traj_index=select_traj_from_last_action(diff_output,rob_grasped)
-                        estimated_action_trajs = extracted_action_trajs[
-                            best_traj_index
-                        ]
-                    #  estimated_action_trajs=torch.mean(extracted_action_trajs,0)
+                       # diff_output = diff_output / (diff_output.norm(dim=1, keepdim=True) + 1e-8)
+                       # labels = cluster_with_dbscan(diff_output, eps=1.0, min_samples=10)
+                       # output_vectors = torch.randn(500, 206)  # Your diffusion model output
+                     #   labels, centers, best_k = auto_kmeans_cluster(diff_output, max_k=12)
+                      #  print("labels == " , labels)
+                       # print("K == " , best_k)
 
-                    #  print("best estimated action traj shape == " , estimated_action_trajs.shape)
-                    #   input()
-                    #   estimated_action_trajs=torch.squeeze(estimated_action_trajs)
 
-                    # print(estimated_action_trajs)
+
+                      #  print("estimated trajectories shape == ", estimated_trajs.shape)
+                        #input()
+                        #extracted_action_trajs=extract_actions_from_diff_output(estimated_trajs)
+                        extracted_action_trajs=extract_actions_from_diff_output_actions_only(estimated_trajs)
+                      #  print("extracted_action_trajs shape == " , extracted_action_trajs.shape)
+                    #    estimated_action_trajs=torch.squeeze(extracted_action_trajs)
+                       # best_traj_index=choose_best_traj(estimated_trajs,grasped=rob_grasped)
+                        best_traj_index,gripped=imagine_trajectories(env , extracted_action_trajs,gripper_is_grasped, render=True, viewer=viewer)
+                      #  best_traj_index=random.randint(0, estimated_trajs.shape[0]-1)
+                      #  best_traj_index=select_traj_from_last_action(diff_output,rob_grasped)
+                        estimated_action_trajs=extracted_action_trajs[best_traj_index]
+                      #  estimated_action_trajs=torch.mean(extracted_action_trajs,0)
+
+                      #  print("best estimated action traj shape == " , estimated_action_trajs.shape)
+                     #   input()
+                     #   estimated_action_trajs=torch.squeeze(estimated_action_trajs)
+
+                        #print(estimated_action_trajs)
                     # best_traj_index=imagine_trajectories(env , estimated_action_trajs, render=True, viewer=viewer)
                     # best_action_traj=estimated_action_trajs[best_traj_index]
                     # for act in range(best_action_traj.shape[0]):
                     #   for act in range(estimated_action_trajs.shape[0]):
-                    # action=best_action_traj[act].cpu().numpy()
+                        # action=best_action_traj[act].cpu().numpy()
 
-                    action = (
-                        estimated_action_trajs[
-                            (current_step - num_prev_obs) % 20
-                        ]
-                        .cpu()
-                        .numpy()
-                    )
-                    base_action = action[0:2]
-                    arm_action = action[2:9]
-                    gripper_action = action[9]
-                    step_action = {
-                        "action": "BaseArmGripperAction2",
-                        "action_args": {
-                            "base_action": (base_action),
-                            "arm_action": (arm_action),
-                            "gripper_action": gripper_action,
-                        },
-                        "value": 2.9779255390167236,
-                    }
-            #            print("step action == " , step_action)
 
+
+                    
+
+                    action=estimated_action_trajs[(current_step-num_prev_obs)%20 ].cpu().numpy()
+                    base_action=action[0:2]
+                    arm_action=action[2:9]
+                    gripper_action=action[9]
+                    step_action={'action': 'BaseArmGripperAction2', 'action_args': {'base_action': (base_action) , 'arm_action':(arm_action) , 'gripper_action':gripper_action }, 'value': 2.9779255390167236}
+        #            print("step action == " , step_action)
+                
             else:
                 actions = outputs_batch["action"]
                 step_action = actions[0].cpu().numpy()
-                action = actions[0].cpu().numpy()
-
-            ##################################################################################################################################
-            ##################################################################################################################################
-
-            # print("obs == ", obs)
-            # print(dir(env.env._env._sim))
-            # print(env.env._env._sim.robot.get_state())
-            # print("targets == " , env.env._env._sim.targets.keys()) #'007_tuna_fish_can_:0000'
-            # print("target == ", env.env._env._sim.rigid_objs['007_tuna_fish_can_:0000'].transformation) ##habitat_config["EPISODE"]
-            # print("episode == " , env.env._env._sim.habitat_config["EPISODE"]['rigid_objs'])
-            # print("action == ", actions)
-            # print("reward == ", reward)
-            #    print("info == ", info)
-            # input()
-
+                action=actions[0].cpu().numpy()
+            
+           
+##################################################################################################################################
+##################################################################################################################################           
+            
+            
+            
+            
+           # print("obs == ", obs)
+            #print(dir(env.env._env._sim))
+           # print(env.env._env._sim.robot.get_state())
+           # print("targets == " , env.env._env._sim.targets.keys()) #'007_tuna_fish_can_:0000'
+           # print("target == ", env.env._env._sim.rigid_objs['007_tuna_fish_can_:0000'].transformation) ##habitat_config["EPISODE"]
+           # print("episode == " , env.env._env._sim.habitat_config["EPISODE"]['rigid_objs'])
+           # print("action == ", actions)
+           # print("reward == ", reward)
+        #    print("info == ", info)
+           # input()
+           
+           
+           
             # step_action = {"action": actions[0].cpu().numpy()}
-            #   step_action = actions[0].cpu().numpy()
-            #  print("step action == " , step_action)
+         #   step_action = actions[0].cpu().numpy()
+          #  print("step action == " , step_action)
             obs, reward, done, info = env.step(step_action)
-            # input()
+           # input()
 
-            successful_grasp = False
-            """
+
+
+
+            successful_grasp=False
+            '''
             if info['obj_to_goal_dist'] <0.05 :
                 placed=True
              #   print("correctly placed")
@@ -1983,210 +1744,229 @@ class PPOTrainerV0(BaseTrainer):
               #  info['rearrange_place_success']=True
                 print("Successful placing")
                # input()
-            """
+            '''
+
+
+
+
 
             ### added by me , to change the task action to the common base-arm action (10D) to be used as the output of the diffusion model
-            current_actions = action
+            current_actions= action
 
-            if actions.shape[1] == 1 and not choose_diffusion:
+                        
+            if actions.shape[1]==1 and not choose_diffusion:
                 if gripper_is_grasped:
-                    current_action = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+                    current_action=np.array([[0, 0 , 0 , 0, 0 ,0 , 0 ,0 ,0 , 1 ]])
 
-                    current_action = torch.from_numpy(current_action)
+                    current_action=torch.from_numpy(current_action)
                 else:
-                    current_action = np.array(
-                        [[0, 0, 0, 0, 0, 0, 0, 0, 0, -1]]
-                    )
-                    current_action = torch.from_numpy(current_action)
+                    current_action=np.array([[0,0 , 0 , 0, 0 ,0 , 0 ,0 ,0 , -1 ]])
+                    current_action=torch.from_numpy(current_action)
+                    
+                current_actions=current_action[0].cpu().numpy() 
 
-                current_actions = current_action[0].cpu().numpy()
 
-            # current_actions=  current_action
 
-            #     print("step action == " , current_actions)
-            #    print("step == " , current_step)
-            #       input()
 
-            #  print("current action == " ,   current_actions)
+
+           # current_actions=  current_action
+           
+
+
+
+
+
+           
+       #     print("step action == " , current_actions)
+        #    print("step == " , current_step)
+     #       input()
+
+           
+           
+           
+           
+           
+           
+           
+          #  print("current action == " ,   current_actions)
             if current_step == 0:
-                current_actions_temp = [current_actions]
+                current_actions_temp=[current_actions]
             else:
-                current_actions_temp = np.append(
-                    current_actions_temp, [current_actions], axis=0
-                )
-            #   input()
+                current_actions_temp= np.append(current_actions_temp,[current_actions],axis=0)
+         #   input()            
             ##########################################
+            
+            current_step+=1
+                        
 
-            current_step += 1
 
-            #  if current_step%20==0:
-            #     print("reset episode ?")
+
+
+
+                                     
+          #  if current_step%20==0:
+           #     print("reset episode ?")
             #    x=input()
-            #   if x=='y':
-            #      print("reseting epsidoe")
-            #     done=True
+             #   if x=='y':
+              #      print("reseting epsidoe")
+               #     done=True
+            
+
+
+
+
+
+
 
             current_episode_reward += reward
             metrics = self._extract_scalars_from_info(info)
-
+            
             if viewer_:
                 frame = env.render(
-                    "human",
-                    info=metrics,
-                    overlay_info=False,
-                    show_info=True,
-                )
-
+                            "human",
+                            info=metrics,
+                            overlay_info=False,
+                            show_info=True,
+                        )
+                        
                 key = viewer.imshow(
-                    frame[..., :3],
-                    delay=1,
-                )
-
+                        frame[..., :3],delay=1,
+                    )
+                
             if choose_diffusion:
-                prev_actions = np.expand_dims(current_actions, axis=0)
+                prev_actions=np.expand_dims(current_actions,axis=0)
             else:
-                prev_actions = actions.cpu()
+                prev_actions=actions.cpu()
 
-            if (
-                done or current_step > 300
-            ):  # or successful_grasp or current_step>1000:# or gripper_is_grasped or gripped: #or gripper_is_grasped or current_step>400:
-
+            if done or current_step>300:#or successful_grasp or current_step>1000:# or gripper_is_grasped or gripped: #or gripper_is_grasped or current_step>400:
+ 
                 episode_stats = metrics.copy()
                 episode_stats["return"] = current_episode_reward
                 all_episode_stats.append(episode_stats)
-                total_episodes += 1
+                total_episodes+=1
                 pbar.update()
 
                 success_measure = self.config.RL.SUCCESS_MEASURE
-                if success_measure in info:
+                if success_measure in info :
                     episode_success = info[success_measure]
                     if not episode_success:
                         failure_episodes.append(env.current_episode.episode_id)
                 else:
                     episode_success = -1
-
-                if (
-                    episode_success
-                ):  # or not episode_success:#or successful_grasp:
+                    
+ 
+                
+                    
+                if episode_success: #or not episode_success:#or successful_grasp:
                     print("successful trajectory")
-                    print("Episode ID == ", env.current_episode.episode_id)
+                    print("Episode ID == " , env.current_episode.episode_id)
                     print("save episode ?")
-                    #  x=input()
-                    if True:  # x=='y':
+                  #  x=input()
+                    if True: #x=='y':
                         print("saving epsiode")
-                        done = True
+                        done=True
                         episode_ids.append(env.current_episode.episode_id)
+                        
+                        dataset_dict['{}'.format(total_episodes-1)]={}
+                        dataset_dict['{}'.format(total_episodes-1)]['rel_rob_pos']=rel_rob_pos_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['rob_ori']=rob_ori_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['rel_ee_pos']=rel_ee_pos_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['rob_qpos']=rob_qpos_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['rob_grasped']=rob_grasped_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['pick_pos']=pick_pos_temp
+                    #  dataset_dict['{}'.format(num_suc_episodes)]['robot_head_rgb']=robot_head_rgb_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['robot_head_depth']=robot_head_depth_temp
+                    # dataset_dict['{}'.format(num_suc_episodes)]['robot_arm_rgb']=robot_arm_rgb_temp
+                        
+                        dataset_dict['{}'.format(total_episodes-1)]['robot_arm_depth']=robot_arm_depth_temp
+                    #  dataset_dict['{}'.format(num_suc_episodes)]['prev_actions']=prev_actions_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['current_actions']=action_to_save_temp
+                        dataset_dict['{}'.format(total_episodes-1)]['episode_ids']=episode_ids                    
+                        
+                     # print("dict == " , dataset_dict)
+                    #    print("keys == " , dataset_dict.keys())
+                    ##    print("episode IDs == " , episode_ids)
+                        print("total number of episodes == " , total_episodes)
+                        print("successful episodes == " , num_suc_episodes )
+                        print("total number of steps == " , total_steps)
+                        print("len(all_episode_stats) == " , len(all_episode_stats) )
 
-                        dataset_dict["{}".format(total_episodes - 1)] = {}
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "rel_rob_pos"
-                        ] = rel_rob_pos_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "rob_ori"
-                        ] = rob_ori_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "rel_ee_pos"
-                        ] = rel_ee_pos_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "rob_qpos"
-                        ] = rob_qpos_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "rob_grasped"
-                        ] = rob_grasped_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "pick_pos"
-                        ] = pick_pos_temp
-                        #  dataset_dict['{}'.format(num_suc_episodes)]['robot_head_rgb']=robot_head_rgb_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "robot_head_depth"
-                        ] = robot_head_depth_temp
-                        # dataset_dict['{}'.format(num_suc_episodes)]['robot_arm_rgb']=robot_arm_rgb_temp
-
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "robot_arm_depth"
-                        ] = robot_arm_depth_temp
-                        #  dataset_dict['{}'.format(num_suc_episodes)]['prev_actions']=prev_actions_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "current_actions"
-                        ] = action_to_save_temp
-                        dataset_dict["{}".format(total_episodes - 1)][
-                            "episode_ids"
-                        ] = episode_ids
-
-                        # print("dict == " , dataset_dict)
-                        #    print("keys == " , dataset_dict.keys())
-                        ##    print("episode IDs == " , episode_ids)
-                        print("total number of episodes == ", total_episodes)
-                        print("successful episodes == ", num_suc_episodes)
-                        print("total number of steps == ", total_steps)
-                        print(
-                            "len(all_episode_stats) == ",
-                            len(all_episode_stats),
-                        )
-
-                        if saved_eps % 100 == 99:
-                            saves += 1
+                        if saved_eps%100 == 99:
+                            saves+=1
                             if not choose_diffusion:
-                                with open(
-                                    "./hab-mobile-manipulation/new_dataset_17_sept/nav_ee_noise_0_15_seed_200_random_ep_p{}.pkl".format(
-                                        saves
-                                    ),
-                                    "wb",
-                                ) as f:
+                                with open('/home/shokry/hab-mobile-manipulation/new_dataset_17_sept/nav_ee_noise_0_15_seed_200_random_ep_p{}.pkl'.format(saves), 'wb') as f:
                                     pickle.dump(dataset_dict, f)
                                     print("saved dataset_dict to file")
-                                    dataset_dict = {}
-                                #  input()
-                        if num_suc_episodes % 100 == 99:
-                            saved_eps = 0
+                                    dataset_dict={} 
+                                  #  input()
+                        if num_suc_episodes%100 == 99:
+                            saved_eps=0
                         else:
-                            saved_eps += 1
+                            saved_eps+=1
+                               
+                    rel_rob_pos_temp=np.array([])
+                    rob_ori_temp=np.array([])
+                    rel_ee_pos_temp=np.array([])
+                    rob_qpos_temp=np.array([])
+                    rob_base_lin_vel_temp=np.array([])
+                    rob_base_ang_vel_temp=np.array([])
+                    rob_grasped_temp=np.array([])
+                    pick_pos_temp=np.array([])
+            #        robot_head_rgb_temp=np.array([])
+                    robot_head_depth_temp=np.array([])
+            #       robot_arm_rgb_temp=np.array([])
+                    robot_arm_depth_temp=np.array([])
+                    prev_actions_temp=np.array([])
+                    current_actions_temp=np.array([])
+                    action_to_save_temp=np.array([])
 
-                    rel_rob_pos_temp = np.array([])
-                    rob_ori_temp = np.array([])
-                    rel_ee_pos_temp = np.array([])
-                    rob_qpos_temp = np.array([])
-                    rob_base_lin_vel_temp = np.array([])
-                    rob_base_ang_vel_temp = np.array([])
-                    rob_grasped_temp = np.array([])
-                    pick_pos_temp = np.array([])
-                    #        robot_head_rgb_temp=np.array([])
-                    robot_head_depth_temp = np.array([])
-                    #       robot_arm_rgb_temp=np.array([])
-                    robot_arm_depth_temp = np.array([])
-                    prev_actions_temp = np.array([])
-                    current_actions_temp = np.array([])
-                    action_to_save_temp = np.array([])
 
-                    num_suc_episodes += 1
-                    current_step = 0
+                    num_suc_episodes+= 1
+                    current_step=0
+                    
+
+                    
+                        
+                        
 
                     #   input()
-
+                    
                 else:
+                    
+                                
+                    rel_rob_pos_temp=np.array([])
+                    rob_ori_temp=np.array([])
+                    rel_ee_pos_temp=np.array([])
+                    rob_qpos_temp=np.array([])
+                    rob_base_lin_vel_temp=np.array([])
+                    rob_base_ang_vel_temp=np.array([])
+                    rob_grasped_temp=np.array([])
+                    pick_pos_temp=np.array([])
+            #     robot_head_rgb_temp=np.array([])
+                    robot_head_depth_temp=np.array([])
+                #    robot_arm_rgb_temp=np.array([])
+                    robot_arm_depth_temp=np.array([])
+                    prev_actions_temp=np.array([])
+                    current_actions_temp=np.array([])
+                    action_to_save_temp=np.array([])
+                    
+                    current_step=0
+                    
+                    
+                    
+                   
+                    
 
-                    rel_rob_pos_temp = np.array([])
-                    rob_ori_temp = np.array([])
-                    rel_ee_pos_temp = np.array([])
-                    rob_qpos_temp = np.array([])
-                    rob_base_lin_vel_temp = np.array([])
-                    rob_base_ang_vel_temp = np.array([])
-                    rob_grasped_temp = np.array([])
-                    pick_pos_temp = np.array([])
-                    #     robot_head_rgb_temp=np.array([])
-                    robot_head_depth_temp = np.array([])
-                    #    robot_arm_rgb_temp=np.array([])
-                    robot_arm_depth_temp = np.array([])
-                    prev_actions_temp = np.array([])
-                    current_actions_temp = np.array([])
-                    action_to_save_temp = np.array([])
 
-                    current_step = 0
 
-                ##  episode IDs ==  ['376', '661', '65', '842', '805', '711', '906', '132']
-                ##episode IDs ==  ['342', '524', '986', '979', '167', '563', '255', '189', '247', '373', '456', '241', '527', '999', '995', '179']
 
-                """
+##  episode IDs ==  ['376', '661', '65', '842', '805', '711', '906', '132']
+##episode IDs ==  ['342', '524', '986', '979', '167', '563', '255', '189', '247', '373', '456', '241', '527', '999', '995', '179']
+
+
+
+
+                '''
                 video_dir='/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/videos/all_targets_epoch_14000'
                 if len(config.VIDEO_OPTION) > 0:
                     print("saving video")
@@ -2201,12 +1981,21 @@ class PPOTrainerV0(BaseTrainer):
                         tb_writer=writer,
                         fps=30,
                     )
-                """
+                '''
 
-                #  env.current_episode.episode_id=0
+
+
+
+
+
+
+
+
+
+              #  env.current_episode.episode_id=0
                 obs = env.reset()
-                #  print("env.current_episode.episode_id == " , env.current_episode.episode_id )
-                #  input()
+              #  print("env.current_episode.episode_id == " , env.current_episode.episode_id )
+              #  input()
                 metrics = {}
                 current_episode_reward = 0
                 rgb_frames = []
@@ -2215,19 +2004,19 @@ class PPOTrainerV0(BaseTrainer):
             batch = batch_obs(
                 [obs], device=self.device, cache=self._obs_batching_cache
             )
-            #    print(" batch == " , batch['robot_arm_depth'].shape)
-            #    print("finished batch = batch_obs() ")
+        #    print(" batch == " , batch['robot_arm_depth'].shape)
+        #    print("finished batch = batch_obs() ")                            
             not_done_masks = torch.tensor(
                 [[not done]], dtype=torch.bool, device=self.device
             )
-            #     print("finished not_done_masks = torch.tensor( ")
+       #     print("finished not_done_masks = torch.tensor( ")                            
             buffer.update(
                 recurrent_hidden_states=outputs_batch["rnn_hidden_states"],
                 prev_actions=outputs_batch["action"],
                 masks=not_done_masks,
             )
-        #     print("finished buffer.update(")
-
+       #     print("finished buffer.update(")
+            
         # Logging metrics
         aggregated_stats = {
             k: np.mean([ep_info[k] for ep_info in all_episode_stats])
@@ -2262,6 +2051,9 @@ class PPOTrainerV0(BaseTrainer):
 
         config = self.config.clone()
 
+  
+
+
         config.defrost()
         config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
         config.freeze()
@@ -2275,6 +2067,7 @@ class PPOTrainerV0(BaseTrainer):
         self._setup_actor_critic(config)
         self.actor_critic.load_state_dict(ckpt_dict["state_dict"])
         self.actor_critic.eval()
+        
 
         if config.EVAL.NUM_EPISODES == -1:
             num_eval_episodes = sum(self.envs.number_of_episodes)

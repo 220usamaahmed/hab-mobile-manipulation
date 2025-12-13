@@ -256,7 +256,13 @@ class SimpleCNN(nn.ModuleList):
 
 
 
-Feat_ext = SimpleCNN(1, (128, 128), 256).to(device).to(torch.float32)
+Feat_ext = SimpleCNN(1, (128, 128), 512).to(device).to(torch.float32)
+Feat_ext.load_state_dict(torch.load(
+    '/home/shokry/hab-mobile-manipulation/rl_trained_encoder/visual_encoder_nav_17_sept.pth',
+    map_location='cpu',
+    weights_only=True
+))
+
 Feat_ext.to(device)
 Feat_ext.eval()
 
@@ -360,10 +366,10 @@ class DiffusionTransformerBlock(nn.Module):
 
 # Conditional Diffusion Model
 class ConditionalDiffusionModel(nn.Module):
-    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=256, hidden_dim=256, num_layers=2):
+    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=512, hidden_dim=256, num_layers=2):
         super().__init__()
 
-        self.visual_feature_extractor = Feat_ext
+    #    self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
         self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
         self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
@@ -388,23 +394,31 @@ class ConditionalDiffusionModel(nn.Module):
 
         batch_size=non_visual_obs.shape[0]
         context_length=non_visual_obs.shape[1]
+        
 
 
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
 
-     #   print("initial visual observation shape == " , visual_obs.shape)
+       # print("initial visual observation shape == " , visual_obs.shape)
         if len(visual_obs.shape)==5:
             visual_obs=visual_obs.permute(0,1,4,2,3) 
+           # arranged_visual_obs=rearrange(visual_obs, 'b s c h w -> (b s) c h w')
+
             visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+
         elif len(visual_obs.shape)==4:
             visual_obs=visual_obs.permute(0,3,1,2)
             visual_obs=Feat_ext(visual_obs)
 
-      #  print("visual featurs shape after feature extraction == " , visual_obs.shape)
         visual_obs=visual_obs.reshape(batch_size*context_length, -1)  # Reshape to (batch_size * context_length, feature_dim)
+
+
+
         visual_obs=self.visual_obs_projection(visual_obs.to(torch.float32))  
        # print("shape after visual feature projection == " , visual_obs.shape )
         visual_obs=visual_obs.reshape(batch_size, context_length, -1)  
+
+
        # print("shape after reshaping back to batch and context length == " , visual_obs.shape )
 
        # print("initial non visual observations shape == " , non_visual_obs.shape)
@@ -512,6 +526,7 @@ class NoiseScheduler:
             visual_obs=visual_obs.unsqueeze(0)  # Add sequence dimension if missing
         visual_obs=visual_obs=visual_obs.repeat(shape[0],1,1,1,1)  # Repeat condition for batch size
         non_visual_obs=non_visual_obs.repeat(shape[0],1,1) 
+
 
         for t in reversed(range(self.timesteps)):
             # Create timestep tensor
@@ -686,7 +701,7 @@ def main():
     num_predicted_acts=20
 
     diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/model_160.pt",
+    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/accurate_data/model_5_prev_obs_pretrained_enc_small_data_2400.pt",
                                             map_location=device))
     diffusion_policy.to(device)
     diffusion_policy.eval()
@@ -888,6 +903,7 @@ def main():
             elif number_of_steps >= num_prev_obs:
                 visual_obs_buffer=visual_obs_buffer[-num_prev_obs: ]
                 visual_obs_buffer_np=visual_obs_buffer_np[-num_prev_obs: , ...]
+
                 non_visual_obs_buffer=non_visual_obs_buffer[-num_prev_obs: ]
                 non_visual_obs_buffer_np=non_visual_obs_buffer_np[-num_prev_obs: , ...]
 
@@ -896,8 +912,10 @@ def main():
                 with torch.no_grad():
                     shape = (10,20,10)
                     actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
+                    actions[:,:,0:2]*=3.0
                     similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
-                    best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                    if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
+                        best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
                     estimated_action_trajs=actions[best_traj_index]
 
             action=estimated_action_trajs[number_of_steps%10 ].detach().cpu().numpy()
@@ -917,7 +935,7 @@ def main():
             ob, reward, done, info = env.step(step_action)
             episode_reward += reward
 
-
+            print("step number == " , number_of_steps)
             number_of_steps+=1
 
             metrics = extract_scalars_from_info(info)

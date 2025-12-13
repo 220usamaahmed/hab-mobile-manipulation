@@ -147,9 +147,10 @@ def imagine_trajectories(env , action_trajectories,gripper_is_grasped,similarity
        # print("press enter for the next trajectory")
      #   input()
    # env.env._env.reset_to_given_pose(start_state=start_state,qpos=initial_qpos)
-
+    print("best traj dist == " , best_traj)
     weighted_distance=distance_vector*(1-similarity_vector)
-   # best_traj=torch.argmin(weighted_distance)
+    best_traj=torch.argmin(weighted_distance)
+    print("best weighted dist traj == " , best_traj)
     env.env._env._sim.set_state(start_state)
     return best_traj,gripped
 
@@ -186,7 +187,7 @@ def cosine_similarity_matrix_torch(vectors: torch.Tensor) -> torch.Tensor:
     best_idx=torch.argmax(similarity_vector)
 
     print("simiarity matrix  == ", similarity_matrix)
-  #  print("similarity vector  == ", similarity_vector)
+    print("similarity vector  == ", similarity_vector)
   #  print("best index == " , best_idx)
    # print("best similarity == " , similarity_vector[best_idx])
     #print("best similarity matrix == " , similarity_matrix[best_idx])
@@ -360,13 +361,16 @@ class DiffusionTransformerBlock(nn.Module):
 
 # Conditional Diffusion Model
 class ConditionalDiffusionModel(nn.Module):
-    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=256, hidden_dim=256, num_layers=2):
+    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,pos_dim=3, gripper_dim=1,qpos_dim=7, depth_features_dim=256, hidden_dim=256, num_layers=2):
         super().__init__()
 
         self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
         self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
-        self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
+        self.rel_nav_pos_projection= nn.Linear(pos_dim, hidden_dim)
+        self.qpos_projection= nn.Linear(qpos_dim, hidden_dim)
+        self.rel_resting_pos_projection= nn.Linear(pos_dim, hidden_dim)
+        self.gripper_state_projection= nn.Linear(gripper_dim, hidden_dim)
 
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(hidden_dim),
@@ -381,14 +385,13 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=11)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=26)  # Sensor position embedding
 
 
-    def forward(self, visual_obs, non_visual_obs, noisy_action, t):
+    def forward(self, visual_obs, rel_nav_pos, qpos ,rel_resting_pos ,gripper_state, noisy_action, t):
 
-        batch_size=non_visual_obs.shape[0]
-        context_length=non_visual_obs.shape[1]
-
+        batch_size=rel_nav_pos.shape[0]
+        context_length=rel_nav_pos.shape[1]
 
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
 
@@ -407,16 +410,39 @@ class ConditionalDiffusionModel(nn.Module):
         visual_obs=visual_obs.reshape(batch_size, context_length, -1)  
        # print("shape after reshaping back to batch and context length == " , visual_obs.shape )
 
-       # print("initial non visual observations shape == " , non_visual_obs.shape)
-        non_visual_obs=self.non_visual_obs_projection(non_visual_obs.to(torch.float32))
-      #  print("shape after reshaping back to batch and context length == " , non_visual_obs.shape )
+
+        #print("initial non visual observations shape == " , non_visual_obs.shape)
+        rel_nav_pos=rel_nav_pos.reshape(batch_size*context_length, -1)
+        rel_nav_pos=self.rel_nav_pos_projection(rel_nav_pos.to(torch.float32))
+        rel_nav_pos=rel_nav_pos.reshape(batch_size, context_length, -1)
+      #  print("shape after rel nav pos projection == " , rel_nav_pos.shape )
+
+
+        qpos=qpos.reshape(batch_size*context_length, -1)
+        qpos=self.qpos_projection(qpos.to(torch.float32))
+        qpos=qpos.reshape(batch_size, context_length, -1)
+       # print("shape after qpos projection == " , qpos.shape )
+
+        rel_resting_pos=rel_resting_pos.reshape(batch_size*context_length, -1)
+        rel_resting_pos=self.rel_resting_pos_projection(rel_resting_pos.to(torch.float32))
+        rel_resting_pos=rel_resting_pos.reshape(batch_size, context_length, -1)
+        #print("shape after rel resting pos projection == " , rel_resting_pos.shape )
+
+        #print("initial gripper state shape == " , gripper_state.shape)
+        gripper_state=gripper_state.reshape(batch_size*context_length, -1)
+        #print("shape after reshaping gripper state == " , gripper_state.shape )
+        gripper_state=self.gripper_state_projection(gripper_state.to(torch.float32))
+       # print("shape after gripper state projection == " , gripper_state.shape )
+        gripper_state=gripper_state.reshape(batch_size, context_length, -1)
+        #print("shape after gripper state projection == " , gripper_state.shape )
+
 
         t=self.time_mlp(t.to(torch.float32))  # Time embedding
         t = t.unsqueeze(1)
         t=t.repeat(batch_size, 1, 1)  # Repeat to match action sequence length
      #   print("t shape after embedding == " , t.shape)
 
-        encoder_input=torch.cat((visual_obs,non_visual_obs,t),dim=1)
+        encoder_input=torch.cat((visual_obs,rel_nav_pos,qpos,rel_resting_pos,gripper_state,t),dim=1)
        # print("encoder input shape == " , encoder_input.shape)
         encoder_input=self.encoder_position_embedding(encoder_input)  # Apply sensor position embedding
 
@@ -436,7 +462,7 @@ class ConditionalDiffusionModel(nn.Module):
 
 # Noise Scheduler (like DDPM)
 class NoiseScheduler:
-    def __init__(self, timesteps=500, beta_start=1e-4, beta_end=0.02):
+    def __init__(self, timesteps=100, beta_start=1e-4, beta_end=0.02):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
        # device = torch.device("cpu")
         self.timesteps = timesteps
@@ -454,19 +480,20 @@ class NoiseScheduler:
         x_new=sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
         return sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
 
-    def get_loss(self, model, x_start, t, visual_obs_batch , non_visual_obs_batch): 
+    def get_loss(self, model, x_start, t, visual_obs_batch , rel_nav_pos_batch, qpos_batch ,rel_resting_pos_batch ,gripper_state_batch): 
         noise = torch.randn_like(x_start).to(torch.float32)
         noisy_action = self.q_sample(x_start, t, noise)
-        predicted_noise = model(visual_obs_batch.to(torch.float32), non_visual_obs_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
+        predicted_noise = model(visual_obs_batch.to(torch.float32), rel_nav_pos_batch.to(torch.float32), qpos_batch.to(torch.float32), 
+                        rel_resting_pos_batch.to(torch.float32),gripper_state_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))        
         return F.mse_loss(predicted_noise, noise)
     
     @torch.no_grad()
-    def p_sample(self, model, noisy_action, t, visual_obs , non_visual_obs):
+    def p_sample(self, model, noisy_action, t, visual_obs , rel_nav_pos, qpos ,rel_resting_pos ,gripper_state):
 
         t.to(device)
         # Predict noise using the model
 
-        predicted_noise = model(visual_obs, non_visual_obs, noisy_action, t )
+        predicted_noise = model(visual_obs, rel_nav_pos, qpos ,rel_resting_pos ,gripper_state, noisy_action, t )
 
       #  print("noisy action shape == " , noisy_action_decoder.shape)
        # print("predicted noise shape == " , predicted_noise.shape)
@@ -492,7 +519,7 @@ class NoiseScheduler:
         return pred_mean
 
     @torch.no_grad()
-    def sample(self, model, shape, visual_obs , non_visual_obs , device, num_random_samples=20):
+    def sample(self, model, shape, visual_obs , rel_nav_pos, qpos ,rel_resting_pos ,gripper_state , device, num_random_samples=20):
         """
         Generate samples using the reverse diffusion process
         
@@ -511,12 +538,16 @@ class NoiseScheduler:
         if len(visual_obs.shape)==4:
             visual_obs=visual_obs.unsqueeze(0)  # Add sequence dimension if missing
         visual_obs=visual_obs=visual_obs.repeat(shape[0],1,1,1,1)  # Repeat condition for batch size
-        non_visual_obs=non_visual_obs.repeat(shape[0],1,1) 
+        rel_nav_pos=rel_nav_pos.repeat(shape[0],1,1) 
+        qpos=qpos.repeat(shape[0],1,1)
+        rel_resting_pos=rel_resting_pos.repeat(shape[0],1,1)
+        gripper_state=gripper_state.repeat(shape[0],1,1)
+
 
         for t in reversed(range(self.timesteps)):
             # Create timestep tensor
             t_tensor = torch.tensor([t]).to(device).to(torch.float32)#torch.full((shape[0],), t, device=device, dtype=torch.long)
-            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t_tensor, visual_obs , non_visual_obs)
+            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t_tensor, visual_obs , rel_nav_pos, qpos ,rel_resting_pos ,gripper_state)
         return noisy_action_decoder
 
 
@@ -686,7 +717,7 @@ def main():
     num_predicted_acts=20
 
     diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/model_160.pt",
+    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/weights_rel_nav_pos_more_tokens/model_more_data_120.pt",
                                             map_location=device))
     diffusion_policy.to(device)
     diffusion_policy.eval()
@@ -756,7 +787,10 @@ def main():
 
         number_of_steps=0
         visual_obs_buffer=[]
-        non_visual_obs_buffer=[]
+        rel_nav_pos_buffer=[]
+        qpos_buffer=[]
+        rel_resting_pos_buffer=[]
+        gripper_state_buffer=[]
         while True:
 
 
@@ -870,32 +904,56 @@ def main():
 
             visual_obs_buffer.append(robot_head_depth)
             visual_obs_buffer_np=np.array(visual_obs_buffer)
-            non_visual_obs_buffer.append( np.concatenate((
-                relative_resting_position,
-                relative_pick_pos_ee,
-                relative_place_pos_ee,
-                relative_pick_pos_base_polar,
-                relative_place_pos_base_polar,
-                robot_qpos,
-                np.array([int(env.env._env._sim.gripper.is_grasped)]),
-            ),axis=-1))
-            non_visual_obs_buffer_np=np.array(non_visual_obs_buffer)
+
+            if gripper_is_grasped:
+                rel_nav_pos_buffer.append( relative_place_pos_base)
+                print("relative_place_pos_base == " , relative_place_pos_base)
+            else:
+                rel_nav_pos_buffer.append( relative_pick_pos_base)
+                print("relative_pick_pos_base == " , relative_pick_pos_base)
+
+            rel_nav_pos_buffer_np=np.array(rel_nav_pos_buffer)
+
+            qpos_buffer.append( robot_qpos)
+            qpos_buffer_np=np.array(qpos_buffer)
+
+            rel_resting_pos_buffer.append( relative_resting_position)
+            rel_resting_pos_buffer_np=np.array(rel_resting_pos_buffer)
+
+            gripper_state_buffer.append( np.array([int(gripper_is_grasped)]) )
+            gripper_state_buffer_np=np.array(gripper_state_buffer)
+
+
 
             if number_of_steps==0:
                 visual_obs_buffer_np=np.repeat(visual_obs_buffer_np, num_prev_obs, axis=0)
-                non_visual_obs_buffer_np=np.repeat(non_visual_obs_buffer_np, num_prev_obs, axis=0)
+                rel_nav_pos_buffer_np=np.repeat(rel_nav_pos_buffer_np, num_prev_obs, axis=0)
+                qpos_buffer_np=np.repeat(qpos_buffer_np, num_prev_obs, axis=0)
+                rel_resting_pos_buffer_np=np.repeat(rel_resting_pos_buffer_np, num_prev_obs, axis=0)
+                gripper_state_buffer_np=np.repeat(gripper_state_buffer_np, num_prev_obs, axis=0)
 
-            elif number_of_steps >= num_prev_obs:
+            elif number_of_steps > num_prev_obs:
                 visual_obs_buffer=visual_obs_buffer[-num_prev_obs: ]
                 visual_obs_buffer_np=visual_obs_buffer_np[-num_prev_obs: , ...]
-                non_visual_obs_buffer=non_visual_obs_buffer[-num_prev_obs: ]
-                non_visual_obs_buffer_np=non_visual_obs_buffer_np[-num_prev_obs: , ...]
+                rel_nav_pos_buffer=rel_nav_pos_buffer[-num_prev_obs: ]
+                rel_nav_pos_buffer_np=rel_nav_pos_buffer_np[-num_prev_obs: , ...]
+                qpos_buffer=qpos_buffer[-num_prev_obs: ]
+                qpos_buffer_np=qpos_buffer_np[-num_prev_obs: , ...]
+                rel_resting_pos_buffer=rel_resting_pos_buffer[-num_prev_obs: ]
+                rel_resting_pos_buffer_np=rel_resting_pos_buffer_np[-num_prev_obs: , ...]
+                gripper_state_buffer=gripper_state_buffer[-num_prev_obs: ]
+                gripper_state_buffer_np=gripper_state_buffer_np[-num_prev_obs: , ...]
 
 
             if number_of_steps==0 or number_of_steps % 10 ==0:
                 with torch.no_grad():
                     shape = (10,20,10)
-                    actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
+                    actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , 
+                                             torch.from_numpy(rel_nav_pos_buffer_np).to(device).to(torch.float32) ,
+                                             torch.from_numpy(qpos_buffer_np).to(device).to(torch.float32) , 
+                                             torch.from_numpy(rel_resting_pos_buffer_np).to(device).to(torch.float32) ,
+                                             torch.from_numpy(gripper_state_buffer_np).to(device).to(torch.float32) , 
+                                             device, num_random_samples=20)
                     similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
                     best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
                     estimated_action_trajs=actions[best_traj_index]
@@ -923,6 +981,7 @@ def main():
             metrics = extract_scalars_from_info(info)
             success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
 
+
             if number_of_steps%10==0:
                 print("reset episode ?")
                 x=input()
@@ -931,14 +990,20 @@ def main():
                     done=True
             
 
+
+
             if args.viewer and key == "r":
                 done = True
-            if number_of_steps>1000 or success:
+            if number_of_steps>5000 or success:
                 print("success =", success)
                 #print("Reached max steps")
                 done=True
             if done:
                 break
+
+                                                 
+
+
 
         gc.collect()
         torch.cuda.empty_cache()

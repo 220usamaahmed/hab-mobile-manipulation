@@ -101,12 +101,19 @@ class SimpleCNN(nn.ModuleList):
 
 
 
-Feat_ext = SimpleCNN(1, (128, 128), 256).to(device).to(torch.float32)
-
 
 
 #directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs'
-directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house'
+directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house/more_data/accurate_data_with_correct_nav_scale'
+
+Feat_ext = SimpleCNN(1, (128, 128), 512).to(device).to(torch.float32)
+Feat_ext.load_state_dict(torch.load( os.path.join(directory, 'visual_encoder_nav_17_sept.pth'),
+    map_location='cpu',
+    weights_only=True
+))
+Feat_ext.to(device)
+Feat_ext.eval()
+
 
 Batch_size=64
 
@@ -215,10 +222,10 @@ class DiffusionTransformerBlock(nn.Module):
 
 # Conditional Diffusion Model
 class ConditionalDiffusionModel(nn.Module):
-    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=256, hidden_dim=256, num_layers=2):
+    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=512, hidden_dim=256, num_layers=2):
         super().__init__()
 
-        self.visual_feature_extractor = Feat_ext
+        #self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
         self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
         self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
@@ -236,7 +243,7 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=11)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Sensor position embedding
 
 
     def forward(self, visual_obs, non_visual_obs, noisy_action, t):
@@ -327,25 +334,55 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
     #print("New action_to_save shape == " , episode_data['action_to_save'].shape)
     for step in range(number_of_steps-num_prev_obs):
         vis_obs_step=[]
+        if step==0:
+            for obs_idx in range(step,step+num_prev_obs):
+                vis_obs_step.append(episode_data['robot_head_depth'][0])
+           # print("vis_obs_step shape at step 0 == " , np.array(vis_obs_step).shape)
+            visual_obs.append(np.array(vis_obs_step))
+            vis_obs_step=[]
+
         for obs_idx in range(step,step+num_prev_obs):
             vis_obs_step.append(episode_data['robot_head_depth'][obs_idx])
         visual_obs.append(np.array(vis_obs_step))
 
         non_vis_obs_step=[]
+        if step==0:
+            for obs_idx in range(step,step+num_prev_obs):
+
+                non_vis_obs_step.append( np.concatenate((
+                    episode_data['rel_resting_pos'][0],
+                    episode_data['rel_pick_pos_ee'][0],
+                    episode_data['rel_place_pos_ee'][0],
+                    episode_data['rel_pick_pos_base_polar'][0],
+                    episode_data['rel_place_pos_base_polar'][0],
+                    episode_data['rob_qpos'][0],
+                    np.array([int(episode_data['is_holding'][0])]),
+                ),axis=-1) )
+          #  print("non_vis_obs_step shape at step 0 == " , np.array(non_vis_obs_step).shape)
+            non_visual_obs.append(np.array(non_vis_obs_step))
+            non_vis_obs_step=[]
+
         for obs_idx in range(step,step+num_prev_obs):
 
             non_vis_obs_step.append( np.concatenate((
                 episode_data['rel_resting_pos'][obs_idx],
                 episode_data['rel_pick_pos_ee'][obs_idx],
                 episode_data['rel_place_pos_ee'][obs_idx],
-                episode_data['rel_pick_pos_base'][obs_idx],
-                episode_data['rel_place_pos_base'][obs_idx],
+                episode_data['rel_pick_pos_base_polar'][obs_idx],
+                episode_data['rel_place_pos_base_polar'][obs_idx],
                 episode_data['rob_qpos'][obs_idx],
                 np.array([int(episode_data['is_holding'][obs_idx])]),
             ),axis=-1) )
         non_visual_obs.append(np.array(non_vis_obs_step))
 
         action_step=[]
+        if step==0:
+            for act_idx in range(step,step+num_predicted_actions):
+                action_step.append(episode_data['action_to_save'][act_idx])
+          #  print("action_step shape at step 0 == " , np.array(action_step).shape)
+            actions.append(np.array(action_step))
+            action_step=[]
+
         for act_idx in range(step+num_prev_obs,step+num_prev_obs+num_predicted_actions):
             action_step.append(episode_data['action_to_save'][act_idx])
         actions.append(np.array(action_step))
@@ -364,9 +401,10 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
     print("device == " , device)
 
     file_names= get_filenames_in_directory(upload_directory)
+ #   file_names=file_names[:20]
 
     model = ConditionalDiffusionModel().to(device)
-    model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
+ #   model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
     model.to(device)
     scheduler = NoiseScheduler()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
@@ -374,11 +412,12 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
     # ----------------------------
     # 5. TensorBoard Setup
     # ----------------------------
-    log_dir = os.path.join(save_directory,"runs_diffusion_complete_trajs_cnn_encoder_scratch", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),"trained_from_scratch_cnn_encoder")
+    log_dir = os.path.join(save_directory,"runs_diffusion_complete_trajs_cnn_encoder_scratch", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),"5_prev_obs_10_acts_pretrained_enc")
     writer = SummaryWriter(log_dir=log_dir)
-    epoch_loss =0.0
-    epoch_samples=0
+
     for epoch in range(number_of_epochs):
+        epoch_loss =0.0
+        epoch_samples=0
         current_file_idx=0
         for file_name in file_names:
             print("Processing file: ", file_name )
@@ -393,6 +432,7 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
 
                 episode_data=data[episode_key]
                 visual_obs_data,non_visual_obs_data,action_data=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
+                action_data[:,:,0:2]/=3.0
                 number_of_samples=action_data.shape[0]
                 number_of_batches=math.ceil(number_of_samples/Batch_size)
                 
@@ -419,21 +459,25 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
             gc.collect()
             torch.cuda.empty_cache()
             
-            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch+1+100, current_file_idx, len(file_names), file_name, total_loss/total_samples))
+            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch, current_file_idx, len(file_names), file_name, total_loss/total_samples))
 
         del data
         gc.collect()
         torch.cuda.empty_cache()
         train_loss = epoch_loss / epoch_samples
-        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch+1+100, train_loss))
+        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch, train_loss))
         writer.add_scalar('Loss/Train', train_loss, epoch)
+        if epoch%1 ==0 :
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    print(f"{name}: grad norm = {param.grad.norm().item()}")
 
-        if epoch%10 ==0 :
+        if epoch%5 ==0 :
          #   for name, param in model.named_parameters():
            #     if param.grad is not None:
             #        print(f"{name}: grad norm = {param.grad.norm().item()}")
           #  input()
-            torch.save(model.state_dict(), os.path.join(save_directory, 'model_{}.pt'.format(epoch+100)) )
+            torch.save(model.state_dict(), os.path.join(save_directory, 'model_5_prev_obs_pretrained_enc_{}.pt'.format(epoch)) )
 
 
 

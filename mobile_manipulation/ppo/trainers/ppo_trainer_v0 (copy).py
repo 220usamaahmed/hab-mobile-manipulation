@@ -59,8 +59,8 @@ import math
 
 
 
-Diffusion_policy=True
-Save_data=False
+Diffusion_policy=False
+Save_data=True
 
 if Diffusion_policy and Save_data:
     print("cannot have both diffusion policy and data saving enabled at the same time")
@@ -1274,7 +1274,7 @@ class PPOTrainerV0(BaseTrainer):
 
         if Diffusion_policy:
             diffusion_policy=ConditionalDiffusionModel()
-            diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data/weights_diff_transformer_complete_trajs_cnn_encoder_scratch/model_10000.pt",
+            diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data/weights_diff_transformer_complete_trajs_cnn_encoder_scratch/model_30000.pt",
                                                     map_location=device))
             diffusion_policy.to(device)
             diffusion_policy.eval()
@@ -1297,7 +1297,8 @@ class PPOTrainerV0(BaseTrainer):
                     step_batch, deterministic=config.EVAL.DETERMINISTIC_ACTION
                 )
                 actions = outputs_batch["action"]
-               # print("actions before diffusion == " , actions)
+                print("actions before diffusion == " , actions)
+
             # step_action = {"action": actions[0].cpu().numpy()}
             step_action = actions[0].cpu().numpy()
 
@@ -1318,7 +1319,7 @@ class PPOTrainerV0(BaseTrainer):
 
                 else:
                     action_to_save=torch.tensor([[current_velocity[0]*3 , current_velocity[1]*3  , 0 , 0, 0 ,0 , 0 ,0 ,0 , -1 ]]) ## the gripper action should be -1
-              #  print("current_velocity == " , current_velocity)
+                print("current_velocity == " , current_velocity)
             else:
                 action_to_save=torch.clamp(actions, min=-1, max=1)
                 action_to_save[:, 0:2]*=1.5
@@ -1411,7 +1412,7 @@ class PPOTrainerV0(BaseTrainer):
                         #actions[:,:,0:2]*=3.0
                         similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
                     #  if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
-                       # best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                        best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
                         estimated_action_trajs=actions[best_traj_index]
 
                 action=estimated_action_trajs[number_of_steps%10 ].detach().cpu().numpy()
@@ -1430,7 +1431,7 @@ class PPOTrainerV0(BaseTrainer):
                 
 
             print("step action == " , step_action)
-            obs, reward, done, info = env.step(step_action)
+            ob, reward, done, info = env.step(step_action)
            # episode_reward += reward
 
             print("step number == " , number_of_steps)
@@ -1439,7 +1440,6 @@ class PPOTrainerV0(BaseTrainer):
             metrics = extract_scalars_from_info(info)
             success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
 
-            
             if number_of_steps%10==0:
                 print("reset episode ?")
                 x=input()
@@ -1560,6 +1560,7 @@ class PPOTrainerV0(BaseTrainer):
                     robot_arm_depth_temp=np.array([])
                     rob_qpos_temp=np.array([])
                     rel_resting_pos_temp=np.array([])
+                    rob_qpos_temp=np.array([])
                     rel_pick_pos_ee_temp=np.array([])
                     rel_place_pos_ee_temp=np.array([])
                     rel_pick_pos_base_temp=np.array([])

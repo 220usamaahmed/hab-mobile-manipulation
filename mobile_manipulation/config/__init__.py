@@ -46,8 +46,8 @@ def get_config(config_path, opts=None) -> Config:
 
     # Load task config into `TASK_CONFIG` from `BASE_TASK_CONFIG_PATH`
     task_config = load_config(config.BASE_TASK_CONFIG_PATH)
- 
- #   task_config.merge_from_other_cfg(config.TASK_CONFIG)
+
+    #   task_config.merge_from_other_cfg(config.TASK_CONFIG)
     config.TASK_CONFIG = task_config
 
     if opts:

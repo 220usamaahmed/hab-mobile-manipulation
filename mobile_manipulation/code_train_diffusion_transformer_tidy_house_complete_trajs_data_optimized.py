@@ -37,11 +37,13 @@ import random
 
 from torch.utils.data import IterableDataset
 
-
+from numpy.lib.stride_tricks import sliding_window_view
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 gc.collect()
 torch.cuda.empty_cache()
+torch.backends.cudnn.benchmark = True
+
 
 class Flatten(nn.Module):
     r"""Copied from torch 1.9."""
@@ -106,7 +108,7 @@ Feat_ext = SimpleCNN(1, (128, 128), 256).to(device).to(torch.float32)
 
 
 #directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs'
-directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house'
+directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house/more_data'
 
 Batch_size=64
 
@@ -311,50 +313,75 @@ class NoiseScheduler:
         predicted_noise = model(visual_obs_batch.to(torch.float32), non_visual_obs_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
         return F.mse_loss(predicted_noise, noise)
 
+def process_episode_data(episode_data, num_prev_obs, num_predicted_actions):
+    robot_head_depth   = np.asarray(episode_data['robot_head_depth'])  # (T, H, W)
+    rel_resting_pos    = np.asarray(episode_data['rel_resting_pos'])
+    rel_pick_pos_ee    = np.asarray(episode_data['rel_pick_pos_ee'])
+    rel_place_pos_ee   = np.asarray(episode_data['rel_place_pos_ee'])
+    rel_pick_pos_base  = np.asarray(episode_data['rel_pick_pos_base'])
+    rel_place_pos_base = np.asarray(episode_data['rel_place_pos_base'])
+    rob_qpos           = np.asarray(episode_data['rob_qpos'])
+    is_holding         = np.asarray(episode_data['is_holding'], dtype=np.float32).reshape(-1, 1)
+    actions            = np.asarray(episode_data['action_to_save'])
 
+    T = actions.shape[0]
+    action_dim = actions.shape[1]
 
-def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
-    visual_obs=[]
-    non_visual_obs=[]
-    actions=[]
+    if T <= num_prev_obs:
+        return (
+            np.empty((0, num_prev_obs, 128, 128)),
+            np.empty((0, num_prev_obs, 100)),
+            np.empty((0, num_predicted_actions, action_dim)),
+        )
 
-    number_of_steps=len(episode_data['action_to_save'])
-    last_action=episode_data['action_to_save'][-1]
-  #  print("last_action == " , last_action.shape)
-    last_action_repeated=np.array([last_action for _ in range(num_predicted_actions)])
-   # print("last_action_repeated shape == " , last_action_repeated.shape)
-    episode_data['action_to_save']=np.concatenate( (episode_data['action_to_save'], last_action_repeated), axis=0)
-    #print("New action_to_save shape == " , episode_data['action_to_save'].shape)
-    for step in range(number_of_steps-num_prev_obs):
-        vis_obs_step=[]
-        for obs_idx in range(step,step+num_prev_obs):
-            vis_obs_step.append(episode_data['robot_head_depth'][obs_idx])
-        visual_obs.append(np.array(vis_obs_step))
+    # ---------- Pad actions for future predictions ----------
+    last_action = actions[-1]
+    pad = np.repeat(last_action[None, :], num_predicted_actions, axis=0)
+    actions_padded = np.concatenate([actions, pad], axis=0)
 
-        non_vis_obs_step=[]
-        for obs_idx in range(step,step+num_prev_obs):
+    # ---------- Build non-visual vector ----------
+    non_visual_full = np.concatenate([
+        rel_resting_pos,
+        rel_pick_pos_ee,
+        rel_place_pos_ee,
+        rel_pick_pos_base,
+        rel_place_pos_base,
+        rob_qpos,
+        is_holding
+    ], axis=-1)  # (T, sensor_dim)
 
-            non_vis_obs_step.append( np.concatenate((
-                episode_data['rel_resting_pos'][obs_idx],
-                episode_data['rel_pick_pos_ee'][obs_idx],
-                episode_data['rel_place_pos_ee'][obs_idx],
-                episode_data['rel_pick_pos_base'][obs_idx],
-                episode_data['rel_place_pos_base'][obs_idx],
-                episode_data['rob_qpos'][obs_idx],
-                np.array([int(episode_data['is_holding'][obs_idx])]),
-            ),axis=-1) )
-        non_visual_obs.append(np.array(non_vis_obs_step))
+    sensor_dim = non_visual_full.shape[-1]
+    num_steps = T - num_prev_obs
 
-        action_step=[]
-        for act_idx in range(step+num_prev_obs,step+num_prev_obs+num_predicted_actions):
-            action_step.append(episode_data['action_to_save'][act_idx])
-        actions.append(np.array(action_step))
+    # ======================================================
+    # 🚀 SUPER-FAST: CUSTOM STRIDED WINDOW FUNCTION
+    # ======================================================
+    def make_windows(arr, window):
+        """
+        arr: (T, ...)
+        return: (T - window + 1, window, ...)
+        """
+        shape = (arr.shape[0] - window + 1, window) + arr.shape[1:]
+        strides = (arr.strides[0], arr.strides[0]) + arr.strides[1:]
+        return np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
 
-    return np.array(visual_obs), np.array(non_visual_obs), np.array(actions)
+    # ---------- Past visual ----------
+    visual_obs = make_windows(robot_head_depth, num_prev_obs)[:num_steps]
 
+    # ---------- Past non-visual ----------
+    non_visual_obs = make_windows(non_visual_full, num_prev_obs)[:num_steps]
 
+    # ---------- Future actions ----------
+    future_actions = make_windows(actions_padded, num_predicted_actions)
 
+    # correct start of future windows = step + num_prev_obs
+    actions_out = future_actions[num_prev_obs : num_prev_obs + num_steps]
 
+    # final safety check
+    assert actions_out.shape[1] == num_predicted_actions, \
+        f"{actions_out.shape} ≠ expected {num_predicted_actions}"
+
+    return visual_obs, non_visual_obs, actions_out
 
 def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_predicted_actions=20):
 
@@ -366,7 +393,7 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
     file_names= get_filenames_in_directory(upload_directory)
 
     model = ConditionalDiffusionModel().to(device)
-    model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
+   # model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
     model.to(device)
     scheduler = NoiseScheduler()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
@@ -393,6 +420,9 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
 
                 episode_data=data[episode_key]
                 visual_obs_data,non_visual_obs_data,action_data=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
+                visual_obs_tensor = torch.from_numpy(visual_obs_data).to(torch.float32)
+                non_visual_obs_tensor = torch.from_numpy(non_visual_obs_data).to(torch.float32)
+                action_tensor      = torch.from_numpy(action_data).to(torch.float32)
                 number_of_samples=action_data.shape[0]
                 number_of_batches=math.ceil(number_of_samples/Batch_size)
                 
@@ -402,9 +432,10 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
                     end_idx=start_idx+Batch_size
                     if end_idx>number_of_samples:
                         end_idx=number_of_samples
-                    visual_obs_batch=torch.from_numpy(visual_obs_data[start_idx:end_idx]).to(device)
-                    non_visual_obs_batch=torch.from_numpy(non_visual_obs_data[start_idx:end_idx]).to(device)
-                    action_batch=torch.from_numpy(action_data[start_idx:end_idx]).to(device)
+                    visual_obs_batch  = visual_obs_tensor[start_idx:end_idx].to(device, non_blocking=True)
+                    non_visual_obs_batch = non_visual_obs_tensor[start_idx:end_idx].to(device, non_blocking=True)
+                    action_batch      = action_tensor[start_idx:end_idx].to(device, non_blocking=True)
+
                     t = torch.randint(0, scheduler.timesteps, (visual_obs_batch.size(0),), device=device)
                     loss = scheduler.get_loss(model, action_batch, t, visual_obs_batch , non_visual_obs_batch)*10
                     loss.backward()
@@ -419,13 +450,13 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
             gc.collect()
             torch.cuda.empty_cache()
             
-            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch+1+100, current_file_idx, len(file_names), file_name, total_loss/total_samples))
+            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch, current_file_idx, len(file_names), file_name, total_loss/total_samples))
 
         del data
         gc.collect()
         torch.cuda.empty_cache()
         train_loss = epoch_loss / epoch_samples
-        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch+1+100, train_loss))
+        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch, train_loss))
         writer.add_scalar('Loss/Train', train_loss, epoch)
 
         if epoch%10 ==0 :
@@ -433,7 +464,7 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
            #     if param.grad is not None:
             #        print(f"{name}: grad norm = {param.grad.norm().item()}")
           #  input()
-            torch.save(model.state_dict(), os.path.join(save_directory, 'model_{}.pt'.format(epoch+100)) )
+            torch.save(model.state_dict(), os.path.join(save_directory, 'model_optimized_{}.pt'.format(epoch)) )
 
 
 

@@ -24,9 +24,7 @@ from mobile_manipulation.utils.common import (
 )
 from mobile_manipulation.utils.wrappers import HabitatActionWrapperV1
 
-from mobile_manipulation.transformer_policy.upload_policy_transformer import (
-    SkillTransformerPolicyLoader,
-)
+from mobile_manipulation.transformer_policy.upload_policy_transformer import SkillTransformerPolicyLoader
 
 import sys
 
@@ -34,11 +32,8 @@ from typing import Any, Dict
 from habitat.tasks.utils import cartesian_to_polar
 
 
-Transformer_policy = True
-device = torch.device(
-    "cuda:0" if torch.cuda.is_available() else torch.device("cpu")
-)
-
+Transformer_policy=True
+device = torch.device("cuda:0" if torch.cuda.is_available() else torch.device('cpu'))
 
 def preprocess_config(config_path: str, config: Config):
     config.defrost()
@@ -188,22 +183,24 @@ def main():
     env = HabitatActionWrapperV1(env)
     env.seed(config.TASK_CONFIG.SEED)
 
+
     # -------------------------------------------------------------------------- #
     # Initialize policy
     # -------------------------------------------------------------------------- #
     if Transformer_policy:
         # Typical training checkpoint that already stored config + state_dict
         loader = SkillTransformerPolicyLoader.from_checkpoint(
-            ckpt_path="../skill_transformer/check_points/tidy_house/ckpt.74.pth",
-            device="cuda",  # or "cpu"
-            strict=False,  # be forgiving across minor code/config changes
-            strip_prefix="module.",  # remove DDP prefix if present
+            ckpt_path="/home/shokry/skill_transformer/check_points/tidy_house/ckpt.54.pth",
+            device="cuda",             # or "cpu"
+            strict=False,              # be forgiving across minor code/config changes
+            strip_prefix="module.",    # remove DDP prefix if present
         )
 
         policy = loader.policy
         print("Loaded policy transformer")
-        #  input()
+      #  input()
         policy.eval()
+
 
     else:
         policy = CompositeSkill(config.SOLUTION, env)
@@ -229,14 +226,14 @@ def main():
     if args.viewer:
         viewer = OpenCVViewer(config.TASK_CONFIG.TASK.TYPE)
 
-    number_of_episodes = 0
+    number_of_episodes=0
     for i_ep in range(num_episodes):
         ob = env.reset()
         initial_robot_pos = env.env._env._sim.robot.base_pos
-        # policy.reset(ob)
+        #policy.reset(ob)
 
         done = False
-        rnn_hidden_states = None  # reset context at episode start
+        rnn_hidden_states = None   # reset context at episode start
         prev_actions = None
 
         # On the first step, mask = 0 (episode just reset)
@@ -248,37 +245,41 @@ def main():
         episode_id = env.current_episode.episode_id
         scene_id = env.current_episode.scene_id
 
-        # print("current episode == " , env.current_episode.target_receptacles[0][1])
+        
+        #print("current episode == " , env.current_episode.target_receptacles[0][1])
+
 
         # Skip episode and keep reproducibility
         if eval_episode_ids is not None and episode_id not in eval_episode_ids:
             print("Skip episode", episode_id)
             continue
 
-        obs_ep_transformer = []
-        actions_ep_transformer = []
-        rewards_ep_transformer = []
-        masks_ep_transformer = []
-        infos_ep_transformer = []
 
-        number_of_steps = 0
+        obs_ep_transformer=[]
+        actions_ep_transformer=[]
+        rewards_ep_transformer=[]
+        masks_ep_transformer=[]
+        infos_ep_transformer=[]
+
+
+        number_of_steps=0
         while True:
-            # step_action = policy.act(ob)
-            #    step_action={'action': 'BaseArmGripperAction2', 'action_args': np.array([-0.21742979,  0.67461574,  0.23001768, -0.99968433,  0.9997787 ,
-            #   -0.25788227,  0.99997264,  0.9999878 ,  0.17983706,  0.99992055],
-            #   dtype=np.float32)}#, 'value': 2.6142804622650146}
-            #   if step_action is None:
-            #      print("Terminate the episode given none action")
-            #     break
+           # step_action = policy.act(ob)
+        #    step_action={'action': 'BaseArmGripperAction2', 'action_args': np.array([-0.21742979,  0.67461574,  0.23001768, -0.99968433,  0.9997787 ,
+    #   -0.25788227,  0.99997264,  0.9999878 ,  0.17983706,  0.99992055],
+   #   dtype=np.float32)}#, 'value': 2.6142804622650146}
+         #   if step_action is None:
+          #      print("Terminate the episode given none action")
+           #     break
 
             # -------------------------------------------------------------------------- #
             # Visualization
             # -------------------------------------------------------------------------- #
             if args.viewer or args.save_video:
                 # Add additional info
-                #  info["values"] = step_action.get("values")
-                # info["value"] = step_action.get("value")
-                # info["success_probs"] = step_action.get("success_probs")
+              #  info["values"] = step_action.get("values")
+               # info["value"] = step_action.get("value")
+               # info["success_probs"] = step_action.get("success_probs")
 
                 metrics = extract_scalars_from_info(info)
                 if args.render_mode == "human":
@@ -307,112 +308,90 @@ def main():
                     step_action = play_action
             # -------------------------------------------------------------------------- #
 
+
+
+
             #######################################################
             #############   Data collection code  #################
             ## This data is collected before action execution ##
 
-            robot_base_pos = env.env._env._sim.robot.base_pos
-            robot_base_orientation = env.env._env._sim.robot.base_ori
-            robot_qpos = env.env._env._sim.robot.arm_joint_pos
-            # robot_ee_T= env.env._env._sim.robot.ee_T
-            robot_ee_pos = env.env._env._sim.robot.gripper_T.translation
-
-            gripper_is_grasped = env.env._env._sim.gripper.is_grasped
+            robot_base_pos= env.env._env._sim.robot.base_pos
+            robot_base_orientation= env.env._env._sim.robot.base_ori
+            robot_qpos= env.env._env._sim.robot.arm_joint_pos 	
+           # robot_ee_T= env.env._env._sim.robot.ee_T 	
+            robot_ee_pos=env.env._env._sim.robot.gripper_T.translation
+        
+            gripper_is_grasped= env.env._env._sim.gripper.is_grasped 	
             if gripper_is_grasped:
-                grasped = 1
+            	grasped=1
             else:
-                grasped = -1
+            	grasped=-1
 
-            pick_goal = env.env._env._task.pick_goal
-            place_goal = env.env._env._task.place_goal
-            resting_pos = env.env._env._task.resting_position
 
-            #  print("robot pos == " , robot_base_pos)
-            #  print("qpos == " , robot_qpos)
-            #  print("pick goal == " , pick_goal)
-            #  print("place goal == " , place_goal)
-            #  print("receptacle == " , env.current_episode.target_receptacles[0][1])
+            pick_goal=   env.env._env._task.pick_goal    
+            place_goal=   env.env._env._task.place_goal 
+            resting_pos=env.env._env._task.resting_position   
+
+          #  print("robot pos == " , robot_base_pos)
+          #  print("qpos == " , robot_qpos)
+          #  print("pick goal == " , pick_goal)
+          #  print("place goal == " , place_goal)
+          #  print("receptacle == " , env.current_episode.target_receptacles[0][1])
+
+
+
+
 
             ## rgb and depth images has the format (W,H,C) where C is the number of channels
             ## You will need to use permute function to change it to (C,W,H) to be compatible with pytorch
-            robot_head_rgb = ob["robot_head_rgb"]
-            robot_arm_rgb = ob["robot_arm_rgb"]
-            robot_head_depth = ob["robot_head_depth"]
-            robot_arm_depth = ob["robot_arm_depth"]
+            robot_head_rgb = ob['robot_head_rgb']
+            robot_arm_rgb = ob['robot_arm_rgb']
+            robot_head_depth = ob['robot_head_depth']
+            robot_arm_depth = ob['robot_arm_depth']
 
-            # print("robot_head_rgb shape == " , robot_head_rgb.shape)
-            # print("robot_arm_rgb shape == " , robot_arm_rgb.shape)
-            # print("robot_head_depth shape == " , robot_head_depth.shape)
-            # print("robot_arm_depth shape == " , robot_arm_depth.shape)
+           # print("robot_head_rgb shape == " , robot_head_rgb.shape)
+           # print("robot_arm_rgb shape == " , robot_arm_rgb.shape)
+           # print("robot_head_depth shape == " , robot_head_depth.shape)
+           # print("robot_arm_depth shape == " , robot_arm_depth.shape)
 
-            ## receptacle number is important to calculate the loss of the auxilary head
+            ## receptacle number is important to calculate the loss of the auxilary head 
             ## in the planner (high-level) transformer
+            
+            receptacle_number= env.current_episode.target_receptacles[0][1]
 
-            receptacle_number = env.current_episode.target_receptacles[0][1]
 
-            #  print("receptacle_number == " , receptacle_number)
+          #  print("receptacle_number == " , receptacle_number)
+
+
 
             robot_transform = env.env._env._sim.robot.base_T
-            robot_ee_transform = env.env._env._sim.robot.gripper_T
-            local_ee_pos_relative_to_base = (
-                robot_transform.inverted().transform_point(robot_ee_pos)
-            )
-            #  abs_ee_pos = env.env._env._sim.robot.ee_transform.translation
-            relative_pick_pos_base = (
-                robot_transform.inverted().transform_point(pick_goal)
-            )
-            relative_pick_pos_base_polar = cartesian_to_polar(
-                relative_pick_pos_base[0], relative_pick_pos_base[2]
-            )
-            relative_pick_pos_ee = (
-                robot_ee_transform.inverted().transform_point(pick_goal)
-            )
+            robot_ee_transform=env.env._env._sim.robot.gripper_T
+            local_ee_pos_relative_to_base=robot_transform.inverted().transform_point(robot_ee_pos)
+          #  abs_ee_pos = env.env._env._sim.robot.ee_transform.translation
+            relative_pick_pos_base = robot_transform.inverted().transform_point(pick_goal)
+            relative_pick_pos_base_polar=cartesian_to_polar(relative_pick_pos_base[0], relative_pick_pos_base[2])
+            relative_pick_pos_ee=robot_ee_transform.inverted().transform_point(pick_goal)
 
-            relative_place_pos_base = (
-                robot_transform.inverted().transform_point(place_goal)
-            )
-            relative_place_pos_base_polar = cartesian_to_polar(
-                relative_place_pos_base[0], relative_place_pos_base[2]
-            )
-            relative_place_pos_ee = (
-                robot_ee_transform.inverted().transform_point(place_goal)
-            )
+            relative_place_pos_base = robot_transform.inverted().transform_point(place_goal)
+            relative_place_pos_base_polar=cartesian_to_polar(relative_place_pos_base[0], relative_place_pos_base[2])
+            relative_place_pos_ee = robot_ee_transform.inverted().transform_point(place_goal)
 
-            current_step_obs_transformer = dict()
-            current_step_info_transformer = dict()
-            current_step_obs_transformer["robot_head_depth"] = torch.unsqueeze(
-                torch.tensor(robot_head_depth), 0
-            ).to(device)
+            current_step_obs_transformer=dict()
+            current_step_info_transformer=dict()
+            current_step_obs_transformer['robot_head_depth']=torch.unsqueeze(torch.tensor(robot_head_depth),0).to(device)
 
-            current_step_obs_transformer["relative_resting_position"] = (
-                torch.tensor(local_ee_pos_relative_to_base - resting_pos).to(
-                    device
-                )
-            )
-            #   print("rel resting pos == " , local_ee_pos_relative_to_base-resting_pos)
-            #  input()
-            current_step_obs_transformer["obj_start_sensor"] = torch.tensor(
-                relative_pick_pos_ee
-            ).to(device)
-            current_step_obs_transformer["obj_goal_sensor"] = torch.tensor(
-                relative_place_pos_ee
-            ).to(device)
-            current_step_obs_transformer["obj_start_gps_compass"] = (
-                torch.tensor(relative_pick_pos_base_polar).to(device)
-            )
-            current_step_obs_transformer["obj_goal_gps_compass"] = (
-                torch.tensor(relative_place_pos_base_polar).to(device)
-            )
-            current_step_obs_transformer["joint"] = torch.tensor(
-                robot_qpos
-            ).to(device)
-            current_step_obs_transformer["is_holding"] = (
-                torch.tensor([1]).to(device)
-                if env.env._env._sim.gripper.is_grasped
-                else torch.tensor([0]).to(device)
-            )
-            #
-            #      print("rnn_hidden_states before in eval comp == ",rnn_hidden_states)
+
+            current_step_obs_transformer['relative_resting_position']=torch.tensor(local_ee_pos_relative_to_base-resting_pos).to(device)
+         #   print("rel resting pos == " , local_ee_pos_relative_to_base-resting_pos)
+          #  input()
+            current_step_obs_transformer['obj_start_sensor']=torch.tensor(relative_pick_pos_ee).to(device)
+            current_step_obs_transformer['obj_goal_sensor']=torch.tensor(relative_place_pos_ee).to(device)
+            current_step_obs_transformer['obj_start_gps_compass']=torch.tensor(relative_pick_pos_base_polar).to(device)
+            current_step_obs_transformer['obj_goal_gps_compass']=torch.tensor(relative_place_pos_base_polar).to(device)
+            current_step_obs_transformer['joint']=torch.tensor(robot_qpos).to(device)
+            current_step_obs_transformer['is_holding']= torch.tensor([1]).to(device) if env.env._env._sim.gripper.is_grasped else torch.tensor([0]).to(device)
+#
+      #      print("rnn_hidden_states before in eval comp == ",rnn_hidden_states)
             out = policy.act(
                 observations=current_step_obs_transformer,
                 rnn_hidden_states=rnn_hidden_states,
@@ -421,59 +400,63 @@ def main():
                 deterministic=True,
                 rtgs=None,
             )
-            rnn_hidden_states = out["rnn_hidden_states"]
-            #    print("rnn_hidden_states after in eval comp == ",rnn_hidden_states)
+            rnn_hidden_states=out['rnn_hidden_states']
+        #    print("rnn_hidden_states after in eval comp == ",rnn_hidden_states)
 
-            arm_action = out["actions"][0, :7]
-            print("arm action == ", arm_action)
-            base_act = out["actions"][0, 7:9] * 3  ##scale for the navigation
-            print("base action == ", base_act)
-            prev_gripper_action = (
-                torch.tensor([1])
-                if env.env._env._sim.gripper.is_grasped
-                else torch.tensor([-1]).to(device)
-            )
-            gripper_action = torch.argmax(out["actions"][0, 9:12])
-            if gripper_action == 0:
-                gripper_action = prev_gripper_action
-            elif gripper_action == 1:
-                gripper_action = torch.tensor([-1]).to(device)
+
+
+            arm_action= out['actions'][0,:7]
+            print("arm action == " , arm_action)
+            base_act= out['actions'][0,7:9]*3  ##scale for the navigation
+            print("base action == " , base_act)
+            prev_gripper_action=torch.tensor([1]) if env.env._env._sim.gripper.is_grasped else torch.tensor([-1]).to(device)
+            gripper_action= torch.argmax(out['actions'][0,9:12])
+            if gripper_action==0:
+                gripper_action=prev_gripper_action
+            elif gripper_action==1:
+                gripper_action=torch.tensor([-1]).to(device)
             else:
-                gripper_action = torch.tensor([1]).to(device)
+                gripper_action=torch.tensor([1]).to(device)
 
-            step_action = {
-                "action": "BaseArmGripperAction2",
-                "action_args": {
-                    "base_action": (base_act.cpu().numpy()),
-                    "arm_action": (arm_action.cpu().numpy()),
-                    "gripper_action": gripper_action.cpu().numpy(),
-                },
-                "value": 2.9779255390167236,
-            }
+            step_action={'action': 'BaseArmGripperAction2', 'action_args':{'base_action': (base_act.cpu().numpy()) , 'arm_action':(arm_action.cpu().numpy()) , 'gripper_action':gripper_action.cpu().numpy() }, 'value': 2.9779255390167236}
             ob, reward, done, info = env.step(step_action)
             episode_reward += reward
 
             obs_ep_transformer.append(current_step_obs_transformer)
             rewards_ep_transformer.append(torch.tensor(reward).unsqueeze(0))
-            actions_ep_transformer.append(out["actions"][0])
-            masks_ep_transformer.append(
-                torch.tensor(1.0 - float(done)).unsqueeze(0)
-            )
+            actions_ep_transformer.append(out['actions'][0])
+            masks_ep_transformer.append(torch.tensor(1.0 - float(done)).unsqueeze(0))
             infos_ep_transformer.append(current_step_info_transformer)
 
-            number_of_steps += 1
+            number_of_steps+=1
 
             prev_actions = out["actions"]
-            prev_actions[0, 9] = torch.argmax(out["actions"][0, 9:12])
-            prev_actions[0, 10:12] = 0.0
+            prev_actions[0,9]=torch.argmax(out['actions'][0,9:12])
+            prev_actions[0,10:12]=0.0
+            metrics = extract_scalars_from_info(info)
+            success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
+
+
+
+            if number_of_steps%50==0:
+                print("reset episode ?")
+                x=input()
+                if x=='y':
+                    print("reseting epsidoe")
+                    done=True
+            
+
+
 
             if args.viewer and key == "r":
                 done = True
-            if number_of_steps > 1000:
-                # print("Reached max steps")
-                done = True
+            if number_of_steps>5000 or success:
+                #print("Reached max steps")
+                done=True
             if done:
                 break
+
+
 
         # -------------------------------------------------------------------------- #
         # Update stats
@@ -491,15 +474,15 @@ def main():
 
         success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
         is_failure = success == False
-        print("success == ", success)
+        print("success == " , success)
         if success:
-            current_episode_dict = dict()
-            current_episode_dict["obs"] = obs_ep_transformer
-            current_episode_dict["actions"] = actions_ep_transformer
-            current_episode_dict["rewards"] = rewards_ep_transformer
-            current_episode_dict["masks"] = masks_ep_transformer
-            current_episode_dict["infos"] = infos_ep_transformer
-        #     torch.save(current_episode_dict ,  f"/home/shokry/hab-mobile-manipulation/collected_dataset_transformer/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
+            current_episode_dict=dict()
+            current_episode_dict["obs"]=obs_ep_transformer
+            current_episode_dict["actions"]=actions_ep_transformer
+            current_episode_dict["rewards"]=rewards_ep_transformer
+            current_episode_dict["masks"]=masks_ep_transformer
+            current_episode_dict["infos"]=infos_ep_transformer
+       #     torch.save(current_episode_dict ,  f"/home/shokry/hab-mobile-manipulation/collected_dataset_transformer/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
         #    input()
         if args.save_video == "all" or (
             args.save_video == "failure" and is_failure
@@ -523,7 +506,7 @@ def main():
                 print("Completed")
                 break
 
-        number_of_episodes += 1
+        number_of_episodes+=1
 
     env.close()
 

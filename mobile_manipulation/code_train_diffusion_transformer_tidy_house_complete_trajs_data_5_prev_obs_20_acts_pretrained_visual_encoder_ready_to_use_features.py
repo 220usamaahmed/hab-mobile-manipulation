@@ -37,7 +37,7 @@ import random
 
 from torch.utils.data import IterableDataset
 
-
+from torch.utils.data import TensorDataset, DataLoader, random_split
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 gc.collect()
@@ -101,12 +101,19 @@ class SimpleCNN(nn.ModuleList):
 
 
 
-Feat_ext = SimpleCNN(1, (128, 128), 256).to(device).to(torch.float32)
-
 
 
 #directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs'
-directory='/lustre/mlnvme/data/s47ashok_hpc-data/complete_trajs_datset_22_nov_tidy_house'
+directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data'
+
+Feat_ext = SimpleCNN(1, (128, 128), 512).to(device).to(torch.float32)
+Feat_ext.load_state_dict(torch.load( os.path.join(directory, 'visual_encoder.pth'),
+    map_location='cpu',
+    weights_only=True
+))
+Feat_ext.to(device)
+Feat_ext.eval()
+
 
 Batch_size=64
 
@@ -215,10 +222,10 @@ class DiffusionTransformerBlock(nn.Module):
 
 # Conditional Diffusion Model
 class ConditionalDiffusionModel(nn.Module):
-    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=256, hidden_dim=256, num_layers=2):
+    def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=512, hidden_dim=256, num_layers=2):
         super().__init__()
 
-        self.visual_feature_extractor = Feat_ext
+        #self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
         self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
         self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
@@ -236,7 +243,7 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=11)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Sensor position embedding
 
 
     def forward(self, visual_obs, non_visual_obs, noisy_action, t):
@@ -247,12 +254,12 @@ class ConditionalDiffusionModel(nn.Module):
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
      #   print("noisy action shape after projection == " , noisy_action.shape)
      #   print("initial visual observation shape == " , visual_obs.shape)
-        if len(visual_obs.shape)==5:
-            visual_obs=visual_obs.permute(0,1,4,2,3) 
-            visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
-        elif len(visual_obs.shape)==4:
-            visual_obs=visual_obs.permute(0,3,1,2)
-            visual_obs=Feat_ext(visual_obs)
+     #   if len(visual_obs.shape)==5:
+      #      visual_obs=visual_obs.permute(0,1,4,2,3) 
+       #     visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+       # elif len(visual_obs.shape)==4:
+        #    visual_obs=visual_obs.permute(0,3,1,2)
+         #   visual_obs=Feat_ext(visual_obs)
 
       #  print("visual featurs shape after feature extraction == " , visual_obs.shape)
         visual_obs=visual_obs.reshape(batch_size*context_length, -1)  # Reshape to (batch_size * context_length, feature_dim)
@@ -327,25 +334,55 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
     #print("New action_to_save shape == " , episode_data['action_to_save'].shape)
     for step in range(number_of_steps-num_prev_obs):
         vis_obs_step=[]
+        if step==0:
+            for obs_idx in range(step,step+num_prev_obs):
+                vis_obs_step.append(episode_data['robot_head_depth'][0])
+           # print("vis_obs_step shape at step 0 == " , np.array(vis_obs_step).shape)
+            visual_obs.append(np.array(vis_obs_step))
+            vis_obs_step=[]
+
         for obs_idx in range(step,step+num_prev_obs):
             vis_obs_step.append(episode_data['robot_head_depth'][obs_idx])
         visual_obs.append(np.array(vis_obs_step))
 
         non_vis_obs_step=[]
+        if step==0:
+            for obs_idx in range(step,step+num_prev_obs):
+
+                non_vis_obs_step.append( np.concatenate((
+                    episode_data['rel_resting_pos'][0],
+                    episode_data['rel_pick_pos_ee'][0],
+                    episode_data['rel_place_pos_ee'][0],
+                    episode_data['rel_pick_pos_base_polar'][0],
+                    episode_data['rel_place_pos_base_polar'][0],
+                    episode_data['rob_qpos'][0],
+                    np.array([int(episode_data['is_holding'][0])]),
+                ),axis=-1) )
+          #  print("non_vis_obs_step shape at step 0 == " , np.array(non_vis_obs_step).shape)
+            non_visual_obs.append(np.array(non_vis_obs_step))
+            non_vis_obs_step=[]
+
         for obs_idx in range(step,step+num_prev_obs):
 
             non_vis_obs_step.append( np.concatenate((
                 episode_data['rel_resting_pos'][obs_idx],
                 episode_data['rel_pick_pos_ee'][obs_idx],
                 episode_data['rel_place_pos_ee'][obs_idx],
-                episode_data['rel_pick_pos_base'][obs_idx],
-                episode_data['rel_place_pos_base'][obs_idx],
+                episode_data['rel_pick_pos_base_polar'][obs_idx],
+                episode_data['rel_place_pos_base_polar'][obs_idx],
                 episode_data['rob_qpos'][obs_idx],
                 np.array([int(episode_data['is_holding'][obs_idx])]),
             ),axis=-1) )
         non_visual_obs.append(np.array(non_vis_obs_step))
 
         action_step=[]
+        if step==0:
+            for act_idx in range(step,step+num_predicted_actions):
+                action_step.append(episode_data['action_to_save'][act_idx])
+          #  print("action_step shape at step 0 == " , np.array(action_step).shape)
+            actions.append(np.array(action_step))
+            action_step=[]
+
         for act_idx in range(step+num_prev_obs,step+num_prev_obs+num_predicted_actions):
             action_step.append(episode_data['action_to_save'][act_idx])
         actions.append(np.array(action_step))
@@ -364,9 +401,10 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
     print("device == " , device)
 
     file_names= get_filenames_in_directory(upload_directory)
+ #   file_names=file_names[:20]
 
     model = ConditionalDiffusionModel().to(device)
-    model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
+ #   model.load_state_dict(torch.load(os.path.join(save_directory, 'model_90.pt'))  )
     model.to(device)
     scheduler = NoiseScheduler()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
@@ -374,66 +412,41 @@ def train_diffusion_model(upload_directory,save_directory,num_prev_obs=5, num_pr
     # ----------------------------
     # 5. TensorBoard Setup
     # ----------------------------
-    log_dir = os.path.join(save_directory,"runs_diffusion_complete_trajs_cnn_encoder_scratch", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),"trained_from_scratch_cnn_encoder")
+    log_dir = os.path.join(save_directory,"runs_diffusion_complete_trajs_cnn_encoder_scratch", datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),"5_prev_obs_10_acts_pretrained_enc")
     writer = SummaryWriter(log_dir=log_dir)
-    epoch_loss =0.0
-    epoch_samples=0
+
+    visual_obs=torch.load(os.path.join(upload_directory, 'visual_obs_data_5_prev_obs.pt'))
+    non_visual_obs=torch.load(os.path.join(upload_directory, 'non_visual_obs_data_5_prev_obs.pt'))
+    action_data=torch.load(os.path.join(upload_directory, 'action_data_20_acts.pt'))
+
+    dataset = TensorDataset(visual_obs,non_visual_obs,action_data)
+    train_size = int(0.9 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+    train_loader = DataLoader(train_dataset, batch_size=256, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=256, shuffle=False)
+
     for epoch in range(number_of_epochs):
-        current_file_idx=0
-        for file_name in file_names:
-            print("Processing file: ", file_name )
-            with open(file_name, 'rb') as f:
-                data = pickle.load(f)
+        train_loss, train_acc = train(model, train_loader, optimizer, device,scheduler)
+        test_loss, test_acc = test(model, test_loader, device,scheduler)
 
-            total_loss =0.0
-            total_samples=0
-            number_of_episodes_in_file=len(data)
-        #    print("Processing file: ", file_name , " with number of episodes == " , number_of_episodes_in_file)
-            for episode_key in data.keys():
+        print(f"Epoch {epoch+1}/{number_of_epochs} | "
+            f"Train Loss: {train_loss:.4f} Acc: {train_acc:.4f} | "
+            f"Test Loss: {test_loss:.4f} Acc: {test_acc:.4f}")
 
-                episode_data=data[episode_key]
-                visual_obs_data,non_visual_obs_data,action_data=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
-                number_of_samples=action_data.shape[0]
-                number_of_batches=math.ceil(number_of_samples/Batch_size)
-                
-                for batch in range(number_of_batches):
-                    optimizer.zero_grad()
-                    start_idx=batch*Batch_size
-                    end_idx=start_idx+Batch_size
-                    if end_idx>number_of_samples:
-                        end_idx=number_of_samples
-                    visual_obs_batch=torch.from_numpy(visual_obs_data[start_idx:end_idx]).to(device)
-                    non_visual_obs_batch=torch.from_numpy(non_visual_obs_data[start_idx:end_idx]).to(device)
-                    action_batch=torch.from_numpy(action_data[start_idx:end_idx]).to(device)
-                    t = torch.randint(0, scheduler.timesteps, (visual_obs_batch.size(0),), device=device)
-                    loss = scheduler.get_loss(model, action_batch, t, visual_obs_batch , non_visual_obs_batch)*10
-                    loss.backward()
-                    optimizer.step()
-                    total_loss += loss.detach().item()
-                    total_samples += number_of_samples
-                    epoch_loss +=loss.detach().item()
-                    epoch_samples+= number_of_samples
-                
-            current_file_idx+=1
-            del visual_obs_data, non_visual_obs_data, action_data
-            gc.collect()
-            torch.cuda.empty_cache()
-            
-            print("Epoch {} file [{}/{}], File: {}, Loss: {:.4f}".format(epoch+1+100, current_file_idx, len(file_names), file_name, total_loss/total_samples))
-
-        del data
-        gc.collect()
-        torch.cuda.empty_cache()
-        train_loss = epoch_loss / epoch_samples
-        print("Completed Epoch {}: Train Loss: {:.4f}".format(epoch+1+100, train_loss))
+        # Log to TensorBoard
         writer.add_scalar('Loss/Train', train_loss, epoch)
+        writer.add_scalar('Loss/Test', test_loss, epoch)
 
-        if epoch%10 ==0 :
-         #   for name, param in model.named_parameters():
-           #     if param.grad is not None:
-            #        print(f"{name}: grad norm = {param.grad.norm().item()}")
+        if epoch%5 ==0 :
+            for name, param in model.named_parameters():
+
+                if param.grad is not None:
+                    print(f"{name}: grad norm = {param.grad.norm().item()}")
           #  input()
-            torch.save(model.state_dict(), os.path.join(save_directory, 'model_{}.pt'.format(epoch+100)) )
+        if epoch%10==0:
+            torch.save(model.state_dict(), os.path.join(save_directory, 'model_{}.pt'.format(epoch)) )
 
 
 
@@ -444,11 +457,11 @@ def train(model, loader, optimizer, device,scheduler):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.train()
     total_loss, correct, total = 0.0, 0, 0
-    for label, target in loader:
-        label, target = label.to(device).to(torch.float32), target.to(device).to(torch.float32)
+    for visual_obs, non_visual_obs, target in loader:
+        visual_obs, non_visual_obs,target = visual_obs.to(device).to(torch.float32), non_visual_obs.to(device).to(torch.float32), target.to(device).to(torch.float32)
         optimizer.zero_grad()
-        t = torch.randint(0, scheduler.timesteps, (label.size(0),), device=device)
-        loss = scheduler.get_loss(model, target, t, label)*10
+        t = torch.randint(0, scheduler.timesteps, (visual_obs.size(0),), device=device)
+        loss = scheduler.get_loss(model, target, t, visual_obs, non_visual_obs)*10
         loss.backward()
         optimizer.step()
 
@@ -462,15 +475,18 @@ def test(model, loader, device,scheduler):
     model.eval()
     total_loss, correct, total = 0.0, 0, 0
     with torch.no_grad():
-        for label, target in loader:
-            label, target = label.to(device).to(torch.float32), target.to(device).to(torch.float32)
-            t = torch.randint(0, scheduler.timesteps, (label.size(0),), device=device)
-            loss = scheduler.get_loss(model, target, t, label)*10
+        for visual_obs, non_visual_obs, target in loader:
+            visual_obs, non_visual_obs,target = visual_obs.to(device).to(torch.float32), non_visual_obs.to(device).to(torch.float32), target.to(device).to(torch.float32)
+            t = torch.randint(0, scheduler.timesteps, (visual_obs.size(0),), device=device)
+            loss = scheduler.get_loss(model, target, t, visual_obs, non_visual_obs)*10
             total_loss += loss
 
             total += target.size(0)
 
     return (total_loss/total)/10 , correct 
+
+
+
 
 
 
