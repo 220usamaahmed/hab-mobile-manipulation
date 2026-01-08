@@ -1,7 +1,7 @@
 __BASE__: "{fileDirname}/base.yaml"
 
 ENVIRONMENT:
-  MAX_EPISODE_STEPS: 500
+  MAX_EPISODE_STEPS: 1000
 
 TASK:
   TYPE: RearrangeNavTask-v0
@@ -17,6 +17,8 @@ TASK:
     - BaseVelAction
     - BaseDiscVelAction
     - BaseVelAction2
+    - BaseArmGripperAction
+    - BaseArmGripperAction2
 
   SENSORS:
     - NavGoalSensor

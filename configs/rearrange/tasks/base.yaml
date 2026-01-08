@@ -136,7 +136,7 @@ TASK:
 DATASET:
   TYPE: RearrangeDataset-v0
   SPLIT: "train"
-  # DATA_PATH: "/home/shokry/hab-mobile-manipulation/data/datasets/replica_cad/rearrange/v1/{split}/tidy_house_10k_1k.json.gz"
-  DATA_PATH: "./data/datasets/replica_cad/rearrange/v1/{split}/tidy_house_10k_1k.json.gz"
+  #DATA_PATH: "/home/shokry/hab-mobile-manipulation/data/datasets/replica_cad/rearrange/v1/{split}/tidy_house_10k_1k.json.gz"
+  DATA_PATH: "data/datasets/rearrange/v3/tidy_house_220417_val.json.gz"
   EPISODE_IDS: []
   NUM_EPISODES: -1
