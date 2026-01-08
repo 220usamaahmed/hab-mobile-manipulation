@@ -210,8 +210,7 @@ def main():
 
     number_of_episodes=0
     for i_ep in range(num_episodes):
-        print("episode number == " , env.current_episode)
-        input()
+        print("episode number == " , env.current_episode.episode_id)
         ob = env.reset()
         initial_robot_pos = env.env._env._sim.robot.base_pos
         policy.reset(ob)
@@ -552,7 +551,7 @@ def main():
             current_episode_dict["rewards"]=rewards_ep_transformer
             current_episode_dict["masks"]=masks_ep_transformer
             current_episode_dict["infos"]=infos_ep_transformer
-            torch.save(current_episode_dict ,  f"/home/shokry/hab-mobile-manipulation/collected_dataset_transformer/tidy_house/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
+            torch.save(current_episode_dict ,  f"/home/shokry/mobile-manipulation/hab-mobile-manipulation/collected_trajectories/tidy_house/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
         #    input()
         if args.save_video == "all" or (
             args.save_video == "failure" and is_failure
