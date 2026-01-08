@@ -8,6 +8,7 @@ import os
 import time
 from collections import deque
 from typing import Dict
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -54,17 +55,12 @@ import gc
 
 import math
 
+from mobile_manipulation.transformer_policy.upload_policy_transformer import SkillTransformerPolicyLoader
 
 
 
 
 
-Diffusion_policy=True
-Save_data=False
-
-if Diffusion_policy and Save_data:
-    print("cannot have both diffusion policy and data saving enabled at the same time")
-    input()
 
 device = torch.device("cuda" if torch.cuda.is_available() else torch.device('cpu'))
 #device =torch.device( "cpu")
@@ -72,6 +68,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else torch.device('cpu
 gc.collect()
 torch.cuda.empty_cache()
   
+def best_traj_q_value(q_value_network, visual_obs_buffer_np, non_visual_obs_buffer_np, actions):
+    num_trajectories=actions.shape[0]
+    visual_obs_buffer=torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32).repeat(num_trajectories,1,1)
+    non_visual_obs_buffer=torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32).repeat(num_trajectories,1,1)
+  #  actions=torch.from_numpy(actions).to(device)
+ #   print("visual obs buffer shape == " , visual_obs_buffer.shape)
+  #  print("non visual obs buffer shape == " , non_visual_obs_buffer.shape)
+  #  print("actions shape == " , actions.shape)
+    q_values=q_value_network(visual_obs_buffer, non_visual_obs_buffer, actions)
+    best_traj_idx=torch.argmax(q_values)
+    print("q values == " , q_values)
+    print("best traj index == " , best_traj_idx)
+    print("best q value == " , q_values[best_traj_idx])
+    return best_traj_idx
+    
+
+
+
+
+
 
 def imagine_trajectories(env , action_trajectories,gripper_is_grasped,similarity_vector, render=False, viewer=None):
     num_trajs=action_trajectories.shape[0]
@@ -177,7 +193,7 @@ def cosine_similarity_matrix_torch(vectors: torch.Tensor) -> torch.Tensor:
     similarity_vector=similarity_vector/similarity_summation
     best_idx=torch.argmax(similarity_vector)
 
-    print("simiarity matrix  == ", similarity_matrix)
+   # print("simiarity matrix  == ", similarity_matrix)
   #  print("similarity vector  == ", similarity_vector)
   #  print("best index == " , best_idx)
    # print("best similarity == " , similarity_vector[best_idx])
@@ -262,6 +278,100 @@ Feat_ext.eval()
 
 
 
+@dataclass
+class TrainConfig:
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    seed: int = 42
+
+    d_vis: int = 512
+    d_nonvis: int = 21
+    d_act: int = 10
+
+    d_model: int = 512
+    n_heads: int = 8
+    n_layers: int = 2
+    dropout: float = 0.1
+
+    hist_len: int = 5
+    horizon: int = 20
+
+    batch_size: int = 128
+    lr: float = 3e-4
+    weight_decay: float = 1e-4
+    grad_clip_norm: float = 1.0
+    num_epochs: int = 50
+
+    gamma: float = 0.99
+    num_action_samples: int = 8
+    target_ema_tau: float = 0.005
+
+    log_every: int = 50
+    ckpt_every_steps: int = 100
+    out_dir: str = "./q_training_runs/run_small_dataset"
+
+
+class QTransformer(nn.Module):
+    def __init__(
+        self,
+        d_vis: int,
+        d_nonvis: int,
+        d_act: int,
+        d_model: int,
+        n_heads: int,
+        n_layers: int,
+        dropout: float,
+        hist_len: int = 5,
+        horizon: int = 20,
+    ):
+        super().__init__()
+        self.hist_len = hist_len
+        self.horizon = horizon
+        self.num_tokens = 2 * hist_len + horizon
+
+        self.vis_proj = nn.Linear(d_vis, d_model)
+        self.nonvis_proj = nn.Linear(d_nonvis, d_model)
+        self.act_proj = nn.Linear(d_act, d_model)
+
+        self.pos_emb = nn.Parameter(torch.zeros(1, self.num_tokens, d_model))
+        nn.init.trunc_normal_(self.pos_emb, std=0.02)
+
+        enc_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=4 * d_model,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=n_layers)
+
+        self.dropout = nn.Dropout(dropout)
+        self.q_head = nn.Sequential(
+            nn.LayerNorm(d_model),
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Linear(d_model, 1),
+        )
+
+    def forward(self, vis_hist: torch.Tensor, nonvis_hist: torch.Tensor, act_seq: torch.Tensor) -> torch.Tensor:
+        B = vis_hist.shape[0]
+        vis_tok = self.vis_proj(vis_hist)
+        nonvis_tok = self.nonvis_proj(nonvis_hist)
+
+        state_tokens = torch.stack([vis_tok, nonvis_tok], dim=2)
+        state_tokens = state_tokens.view(B, 2 * self.hist_len, -1)
+
+        act_tokens = self.act_proj(act_seq)
+
+        x = torch.cat([state_tokens, act_tokens], dim=1)
+        x = x + self.pos_emb
+        x = self.dropout(x)
+
+        h = self.encoder(x)
+        pooled = h.mean(dim=1)
+        q = self.q_head(pooled).squeeze(-1)
+        return q
 
 
 
@@ -1211,6 +1321,7 @@ class PPOTrainerV0(BaseTrainer):
         # Initialize policy inputs
 
         obs = env.reset()
+        initial_qpos=env.env._env._sim.robot.arm_joint_pos.copy()
         self._obs_batching_cache = ObservationBatchingCache()
         batch = batch_obs(
             [obs], device=self.device, cache=self._obs_batching_cache
@@ -1240,7 +1351,7 @@ class PPOTrainerV0(BaseTrainer):
         current_step=0
         
 
-        print("num_eval_episodes == ", num_eval_episodes)
+        print("original num_eval_episodes == ", num_eval_episodes)
 
         robot_head_depth_temp=np.array([])
         robot_arm_depth_temp=np.array([])
@@ -1259,6 +1370,18 @@ class PPOTrainerV0(BaseTrainer):
         episode_ids=[]
 
 
+        ### transformer policy data collection buffers
+        obs_ep_transformer=[]
+        actions_ep_transformer=[]
+        rewards_ep_transformer=[]
+        masks_ep_transformer=[]
+        infos_ep_transformer=[]
+
+        rnn_hidden_states_transformer = None 
+        prev_actions_transfomer = None
+        masks_transformer = torch.tensor([1.0], device=device)
+
+
         number_of_episodes=0
         num_suc_episodes=0
         total_steps=0
@@ -1272,9 +1395,41 @@ class PPOTrainerV0(BaseTrainer):
         visual_obs_buffer=[]
         non_visual_obs_buffer=[]
 
+
+        Diffusion_policy=True
+        Transformer_policy=False
+
+        Save_data=False
+        
+
+        if ('pick' in config.BASE_RUN_DIR or 'place' in config.BASE_RUN_DIR) and not Diffusion_policy:
+            pick_place_task_flag=True
+            start_reset_arm=False
+            done=False
+            planned_reset_steps=0
+            current_reset_steps=0
+            manually_reset_arm=True
+            done_place_skill=False
+        else:
+            pick_place_task_flag=False
+
+
+
+        if Save_data:
+            num_eval_episodes=10000  
+            print("Modified num_eval_episodes == ", num_eval_episodes)
+
+
+        if (Diffusion_policy and Save_data) or (Transformer_policy and Save_data):
+            print("cannot have both diffusion policy and data saving enabled at the same time")
+            input()
+        if Diffusion_policy and Transformer_policy:
+            print("cannot have both diffusion policy and transformer policy enabled at the same time")
+            input()
+
         if Diffusion_policy:
             diffusion_policy=ConditionalDiffusionModel()
-            diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data/weights_diff_transformer_complete_trajs_cnn_encoder_scratch/model_10000.pt",
+            diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data/marvin_weights/pretrained_visual_encoder_2190.pt",
                                                     map_location=device))
             diffusion_policy.to(device)
             diffusion_policy.eval()
@@ -1282,14 +1437,48 @@ class PPOTrainerV0(BaseTrainer):
                 p.requires_grad_(False)
             scheduler = NoiseScheduler()
 
+            cfg = TrainConfig()
+            q_value_network=  QTransformer(
+                d_vis=cfg.d_vis,
+                d_nonvis=cfg.d_nonvis,
+                d_act=cfg.d_act,
+                d_model=cfg.d_model,
+                n_heads=cfg.n_heads,
+                n_layers=cfg.n_layers,
+                dropout=cfg.dropout,
+                hist_len=cfg.hist_len,
+                horizon=cfg.horizon,
+            ).to(cfg.device)
+
+            ckpt = torch.load('/home/shokry/hab-mobile-manipulation/mobile_manipulation/q_training_runs/run_small_dataset/ckpt_step_4500.pt', map_location="cpu")
+
+            q_value_network.load_state_dict(ckpt["q_state_dict"])
+
+
             print("Loaded Diffusion Policy")
             
         pbar = tqdm.tqdm(total=num_eval_episodes)
 
+        if Transformer_policy:
+        # Typical training checkpoint that already stored config + state_dict
+            loader = SkillTransformerPolicyLoader.from_checkpoint(
+                ckpt_path="/home/shokry/skill_transformer/check_points/tidy_house/ckpt.54.pth",
+                device="cuda",             # or "cpu"
+                strict=False,              # be forgiving across minor code/config changes
+                strip_prefix="module.",    # remove DDP prefix if present
+            )
+
+            transformer_policy = loader.policy
+            print("Loaded policy transformer")
+        #  input()
+            transformer_policy.eval()
+
         while len(all_episode_stats) < num_eval_episodes:
-            print("current episode == ", env.current_episode.episode_id)
-            if len(config.VIDEO_OPTION) > 0:
-                rgb_frames.append(env.render("human", info=metrics))
+
+           # print("current episode == ", env.current_episode.episode_id)
+            
+          #  if len(config.VIDEO_OPTION) > 0:
+           #     rgb_frames.append(env.render("human", info=metrics))
 
             with torch.no_grad():
                 step_batch = dict(observations=batch, **buffer)
@@ -1365,6 +1554,7 @@ class PPOTrainerV0(BaseTrainer):
             local_ee_pos_relative_to_base=robot_transform.inverted().transform_point(robot_ee_pos)
           #  abs_ee_pos = env.env._env._sim.robot.ee_transform.translation
             relative_pick_pos_base = robot_transform.inverted().transform_point(pick_goal)
+            
             relative_pick_pos_base_polar=cartesian_to_polar(relative_pick_pos_base[0], relative_pick_pos_base[2])
             relative_pick_pos_ee=robot_ee_transform.inverted().transform_point(pick_goal)
 
@@ -1388,6 +1578,58 @@ class PPOTrainerV0(BaseTrainer):
                 np.array([int(env.env._env._sim.gripper.is_grasped)]),
             ),axis=-1))
             non_visual_obs_buffer_np=np.array(non_visual_obs_buffer)
+            '''
+            print("pick pos in world frame == " , pick_goal)
+            print("place pos in world frame == " , place_goal)
+            print("relative_pick_pos_base == " , relative_pick_pos_base)
+            print("relative_place_pos_base == " , relative_place_pos_base)
+            print("relative_pick_pos_base_polar == " , relative_pick_pos_base_polar)
+            print("relative_place_pos_base_polar == " , relative_place_pos_base_polar)
+            print("relative_pick_pos_ee == " , relative_pick_pos_ee)
+            print("relative_place_pos_ee == " , relative_place_pos_ee)
+            '''
+
+            ### transformer data format
+            if Transformer_policy:
+                current_step_obs_transformer=dict()
+                current_step_info_transformer=dict()
+                current_step_obs_transformer['robot_head_depth']=torch.unsqueeze(torch.tensor(robot_head_depth),0).to(device)
+
+
+                current_step_obs_transformer['relative_resting_position']=torch.tensor(local_ee_pos_relative_to_base-resting_pos).to(device)
+            #   print("rel resting pos == " , local_ee_pos_relative_to_base-resting_pos)
+            #  input()
+                current_step_obs_transformer['obj_start_sensor']=torch.tensor(relative_pick_pos_ee).to(device)
+                current_step_obs_transformer['obj_goal_sensor']=torch.tensor(relative_place_pos_ee).to(device)
+                current_step_obs_transformer['obj_start_gps_compass']=torch.tensor(relative_pick_pos_base_polar).to(device)
+                current_step_obs_transformer['obj_goal_gps_compass']=torch.tensor(relative_place_pos_base_polar).to(device)
+                current_step_obs_transformer['joint']=torch.tensor(robot_qpos).to(device)
+                current_step_obs_transformer['is_holding']= torch.tensor([1]).to(device) if env.env._env._sim.gripper.is_grasped else torch.tensor([0]).to(device)
+    #
+                out = transformer_policy.act(
+                    observations=current_step_obs_transformer,
+                    rnn_hidden_states=rnn_hidden_states_transformer,
+                    prev_actions=prev_actions_transfomer,
+                    masks=masks_transformer,
+                    deterministic=True,
+                    rtgs=None,
+                )
+                rnn_hidden_states_transformer=out['rnn_hidden_states']
+                arm_action= out['actions'][0,:7]
+             #   print("arm action == " , arm_action)
+                base_act= out['actions'][0,7:9]*3  ##scale for the navigation
+              #  print("base action == " , base_act)
+                prev_gripper_action=torch.tensor([1]) if env.env._env._sim.gripper.is_grasped else torch.tensor([-1]).to(device)
+                gripper_action= torch.argmax(out['actions'][0,9:12])
+                if gripper_action==0:
+                    gripper_action=prev_gripper_action
+                elif gripper_action==1:
+                    gripper_action=torch.tensor([-1]).to(device)
+                else:
+                    gripper_action=torch.tensor([1]).to(device)
+
+                step_action={'action': 'BaseArmGripperAction2', 'action_args':{'base_action': (base_act.cpu().numpy()) , 'arm_action':(arm_action.cpu().numpy()) , 'gripper_action':gripper_action.cpu().numpy() }, 'value': 2.9779255390167236}
+    
 
 
             if number_of_steps==0:
@@ -1401,17 +1643,19 @@ class PPOTrainerV0(BaseTrainer):
                 non_visual_obs_buffer=non_visual_obs_buffer[-num_prev_obs: ]
                 non_visual_obs_buffer_np=non_visual_obs_buffer_np[-num_prev_obs: , ...]
 
-       #     print("visual_obs_buffer_np.shape == " , visual_obs_buffer_np.shape)
-        #    print("non_visual_obs_buffer_np.shape == " , non_visual_obs_buffer_np.shape)
+        #    print("visual_obs_buffer_np.shape == " , visual_obs_buffer_np.shape)
+         #   print("non_visual_obs_buffer_np.shape == " , non_visual_obs_buffer_np.shape)
             if Diffusion_policy:
                 if number_of_steps==0 or number_of_steps % 10 ==0:
                     with torch.no_grad():
                         shape = (10,20,10)
                         actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
                         #actions[:,:,0:2]*=3.0
+
                         similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
-                    #  if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
-                       # best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                        if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
+                            best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                        best_traj_index_q_values=best_traj_q_value(q_value_network, visual_obs_buffer_np, non_visual_obs_buffer_np, actions)
                         estimated_action_trajs=actions[best_traj_index]
 
                 action=estimated_action_trajs[number_of_steps%10 ].detach().cpu().numpy()
@@ -1421,7 +1665,7 @@ class PPOTrainerV0(BaseTrainer):
                 action[9]=np.clip(action[9],-1,1)  # Clip gripper action 
 
                 base_action=np.clip(action[0:2],-3,3)
-            #  print("base action == " , base_action)
+             #   print("base action == " , base_action)
                 arm_action=np.clip(action[2:9],-1,1)
             # print("arm action == " , arm_action)
                 gripper_action=np.clip(action[9],-1,1)
@@ -1429,23 +1673,99 @@ class PPOTrainerV0(BaseTrainer):
                 step_action={'action': 'BaseArmGripperAction2', 'action_args': {'base_action': (base_action) , 'arm_action':(arm_action) , 'gripper_action':gripper_action }, 'value': 2.9779255390167236}
                 
 
-            print("step action == " , step_action)
-            obs, reward, done, info = env.step(step_action)
+
+
+           # print("step action == " , step_action)
+            if pick_place_task_flag and manually_reset_arm and Save_data:
+                
+                
+                if start_reset_arm :
+                #    print("Resetting arm to initial position")
+                #    input()
+                    if current_reset_steps==0 :
+                        
+                        target_qpos = np.array(initial_qpos)
+
+                     #   target_qpos = np.array(target_qpos)
+                        current_qpos= env.env._env._sim.robot.arm_joint_pos
+                        planned_reset_steps = np.ceil(np.max(np.abs(target_qpos - current_qpos)) / 0.025)
+                        planned_reset_steps = max(1, int(planned_reset_steps))
+                        incremental_qpos_act= np.array(((target_qpos - current_qpos)/planned_reset_steps)/0.025)
+                        current_reset_steps+=1
+                  #      print("planned_reset_steps == " , planned_reset_steps)
+                  #      print("incremental_qpos_act == " , incremental_qpos_act)
+
+                    if current_reset_steps <= planned_reset_steps:
+                        
+                        
+                        if gripper_is_grasped:
+                            step_action={'action': 'BaseArmGripperAction2', 'action_args': {'base_action': np.array([0.0, 0.0]) , 'arm_action': incremental_qpos_act , 'gripper_action': 1 }, 'value': 2.9779255390167236}
+                            action_to_save=np.concatenate( (np.array([[0.0, 0.0]]), incremental_qpos_act.reshape(1,-1) , np.array([[1]]) ) , axis=1)
+
+                        else:
+                            step_action={'action': 'BaseArmGripperAction2', 'action_args': {'base_action': np.array([0.0, 0.0]) , 'arm_action': incremental_qpos_act , 'gripper_action': -1 }, 'value': 2.9779255390167236}
+                            action_to_save=np.concatenate( (np.array([[0.0, 0.0]]), incremental_qpos_act.reshape(1,-1) , np.array([[-1]]) ) , axis=1)
+                   #     print("step action in resetting arm == " , step_action)
+                        current_reset_steps+=1
+                    
+            #    print("step_action == " , step_action)
+              #  input()
+                obs, reward, done, info = env.step(step_action)
+             #   print("done == " , done)
+                
+                success_measure = self.config.RL.SUCCESS_MEASURE
+                if success_measure in info:
+                    success_pick_task = info[success_measure]
+               #     print("done_pick_place == " , done_pick_place)
+                #    print("success measure == " , success_measure)
+               #     print("success place task == " , success_pick_task)
+
+                if current_reset_steps== planned_reset_steps+1:
+
+                    done_place_skill=True
+                    success_pick_task=True
+                else:
+                    done_place_skill=False
+                    
+                if done and success_pick_task:
+                    start_reset_arm=True
+                   # print("Starting arm reset")
+                    #input()
+                    #success_measure = self.config.RL.SUCCESS_MEASURE
+                  #  if success_measure in info:
+                   #     success_pick_task = info[success_measure]
+                    #    print("success_pick_task == " , success_pick_task)
+            else:
+              #  print("normal step action == " , step_action)
+               # input()
+                obs, reward, done, info = env.step(step_action)
+                done_place_skill=done
+
+       #     print("info == " , info)
            # episode_reward += reward
 
-            print("step number == " , number_of_steps)
+            #print("step number == " , number_of_steps)
             number_of_steps+=1
+
+            if Transformer_policy:
+
+                prev_actions_transfomer = out["actions"]
+                prev_actions_transfomer[0,9]=torch.argmax(out['actions'][0,9:12])
+                prev_actions_transfomer[0,10:12]=0.0
 
             metrics = extract_scalars_from_info(info)
             success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
 
+
             
-            if number_of_steps%10==0:
+            if number_of_steps%10==0 and not Save_data:
                 print("reset episode ?")
                 x=input()
                 if x=='y':
                     print("reseting epsidoe")
                     done=True
+                    done_place_skill=True
+            
             
 
             if current_step==0:
@@ -1478,6 +1798,9 @@ class PPOTrainerV0(BaseTrainer):
 
 
 
+           # print("action_to_save == " , action_to_save)
+
+
 
          #   obs, reward, done, info = env.step(step_action)
             current_step+=1
@@ -1498,11 +1821,23 @@ class PPOTrainerV0(BaseTrainer):
                     )
                # input()
 
-            if done or current_step==config.TASK_CONFIG.ENVIRONMENT.MAX_EPISODE_STEPS:
+            if done_place_skill or current_step==config.TASK_CONFIG.ENVIRONMENT.MAX_EPISODE_STEPS+(planned_reset_steps if pick_place_task_flag and manually_reset_arm else 0):
+ 
+               # print("in the done function")
+              #  print("done == " , done_place_skill)
+             #   input()
                 episode_stats = metrics.copy()
                 episode_stats["return"] = current_episode_reward
                 all_episode_stats.append(episode_stats)
                 pbar.update()
+
+                if pick_place_task_flag:
+                    start_reset_arm=False
+                    done_pick_place=False
+
+
+                    planned_reset_steps=0
+                    current_reset_steps=0
 
                 success_measure = self.config.RL.SUCCESS_MEASURE
                 if success_measure in info:
@@ -1512,17 +1847,31 @@ class PPOTrainerV0(BaseTrainer):
                 else:
                     episode_success = -1
 
+                '''
+                
                 if len(config.VIDEO_OPTION) > 0:
                     generate_video(
                         video_option=config.VIDEO_OPTION,
                         video_dir=config.VIDEO_DIR,
                         images=rgb_frames,
-                        episode_id=env.current_episode.episode_id,
+                        episode_id=len(all_episode_stats),#env.current_episode.episode_id,
                         checkpoint_idx=checkpoint_index,
                         metrics={"success": episode_success},
                         tb_writer=writer,
                         fps=30,
                     )
+                '''
+                
+
+
+
+                if pick_place_task_flag and manually_reset_arm:
+                    if success_pick_task==1:
+                        episode_success=1
+                    else:
+                        episode_success=0
+
+                print("episode_success == " , episode_success)
 
                 if episode_success==1:
                     print("successful trajectory")
@@ -1580,7 +1929,7 @@ class PPOTrainerV0(BaseTrainer):
                     if num_suc_episodes%50 == 49 and Save_data:
                         saves+=1
                     
-                        with open('/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/nav_only_part_{}.pkl'.format(saves), 'wb') as f:
+                        with open('/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/nav_only_eval_dataset_10000_ep_part_{}.pkl'.format(saves), 'wb') as f:
                             pickle.dump(dataset_dict, f)
                             dataset_dict={} 
 
@@ -1600,17 +1949,28 @@ class PPOTrainerV0(BaseTrainer):
                     is_holding_temp=np.array([])
                     action_to_save_temp=np.array([])
 
+                if Transformer_policy:
+                    rnn_hidden_states_transformer = None
+                    prev_actions_transfomer = None
+                    masks_transformer = torch.tensor([1.0], device=device)
+
 
                 obs = env.reset()
                 current_step=0
+                number_of_steps=0
+                visual_obs_buffer=[]
+                non_visual_obs_buffer=[]
                 metrics = {}
                 current_episode_reward = 0
                 rgb_frames = []
+
 
             # Update policy inputs
             batch = batch_obs(
                 [obs], device=self.device, cache=self._obs_batching_cache
             )
+
+
             not_done_masks = torch.tensor(
                 [[not done]], dtype=torch.bool, device=self.device
             )
