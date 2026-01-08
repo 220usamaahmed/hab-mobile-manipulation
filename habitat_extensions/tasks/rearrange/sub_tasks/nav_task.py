@@ -70,7 +70,7 @@ class RearrangeNavTask(RearrangeTask):
           #  print("place object specs == " , self.tgt_T )
             
            # input()
-
+          #  supported_tasks=["pick"]
             for sub_task in supported_tasks:
                 self._set_sub_task(sub_task)
                 self._initialize_target_receptacle()
@@ -538,10 +538,14 @@ class RearrangeNavTaskV1(RearrangeNavTask):
             self._sim.visualize_arrow(f"nav_goal_{i}", pos, ori, scale=0.3)
 
         # Show pick goal
-        if self.sub_task != "place":
-            self._sim.viz_objs["pick_goal"] = self._sim.add_viz_obj(
+       # if self.sub_task != "place":
+        self._sim.viz_objs["pick_goal"] = self._sim.add_viz_obj(
                 self.pick_goal
             )
+        self._sim.viz_objs["place_goal"] = self._sim.add_viz_obj(
+                self.place_goal
+            )
+
 
         if self.spawn_region is not None:
             self._sim.visualize_region(

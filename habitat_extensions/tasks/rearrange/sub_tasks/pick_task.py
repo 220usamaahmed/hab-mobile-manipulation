@@ -89,7 +89,7 @@ class RearrangePickTask(RearrangeTask):
             tgt_indices = [self._config.TARGET_INDEX]
         else:
             tgt_indices = self.np_random.permutation(n_targets)
-       #     print("target indices == " ,  tgt_indices)
+
         keys=[]
 
 
@@ -135,6 +135,7 @@ class RearrangePickTask(RearrangeTask):
             else:
                 self._initialize_target_receptacle(episode)
                 start_state = self.sample_start_state(episode)
+
                 self._set_cache_start_state(episode.episode_id, start_state)
 
             if start_state is not None:
