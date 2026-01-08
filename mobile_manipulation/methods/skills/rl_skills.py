@@ -26,11 +26,13 @@ class RLSkill(Skill):
 
     def _init_policy(self, ckpt_path: str, skill_idx: str = ""):
         ckpt_dict = torch.load(ckpt_path, map_location="cpu")
-        print(f"Loaded checkpoint from {ckpt_path}")
+        #print(f"Loaded checkpoint from {ckpt_path}")
 
         ckpt_config = ckpt_dict["config"]
         action_space = self._action_space[self._config.ACTION]
+       # print("Action space:", action_space)
         policy_config = ckpt_config.RL["POLICY" + skill_idx]
+      #  print("Policy config:", policy_config)
         policy = baseline_registry.get_policy(policy_config.name)
         actor_critic: ActorCritic = policy.from_config(
             policy_config, self._obs_space, action_space
@@ -38,6 +40,8 @@ class RLSkill(Skill):
 
         state_dict = ckpt_dict["state_dict" + skill_idx]
         state_dict = get_state_dict_by_prefix(state_dict, "actor_critic.")
+      #  print("state_dict keys:", state_dict.keys())
+     #   input()
         actor_critic.load_state_dict(state_dict)
         actor_critic.eval()
 

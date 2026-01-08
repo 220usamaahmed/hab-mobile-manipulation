@@ -255,11 +255,6 @@ def main():
             continue
 
 
-        obs_ep_transformer=[]
-        actions_ep_transformer=[]
-        rewards_ep_transformer=[]
-        masks_ep_transformer=[]
-        infos_ep_transformer=[]
 
 
         number_of_steps=0

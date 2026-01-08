@@ -258,7 +258,7 @@ class SimpleCNN(nn.ModuleList):
 
 Feat_ext = SimpleCNN(1, (128, 128), 512).to(device).to(torch.float32)
 Feat_ext.load_state_dict(torch.load(
-    '/home/shokry/hab-mobile-manipulation/rl_trained_encoder/visual_encoder_nav_17_sept.pth',
+    '/home/shokry/hab-mobile-manipulation/pretrained_encoder/visual_encoder.pth',
     map_location='cpu',
     weights_only=True
 ))
@@ -387,7 +387,7 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=11)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Sensor position embedding
 
 
     def forward(self, visual_obs, non_visual_obs, noisy_action, t):
@@ -701,7 +701,7 @@ def main():
     num_predicted_acts=20
 
     diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/accurate_data/model_5_prev_obs_pretrained_enc_small_data_2400.pt",
+    diffusion_policy.load_state_dict(torch.load("/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/weights/concatenated_non_visual_obs_more_data/accurate_data/model_all_tasks_eval_dataset_5_prev_obs_20_act_4400.pt",
                                             map_location=device))
     diffusion_policy.to(device)
     diffusion_policy.eval()
@@ -951,7 +951,7 @@ def main():
 
             if args.viewer and key == "r":
                 done = True
-            if number_of_steps>1000 or success:
+            if number_of_steps>5000 or success:
                 print("success =", success)
                 #print("Reached max steps")
                 done=True

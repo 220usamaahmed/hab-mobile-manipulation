@@ -100,7 +100,7 @@ class SimpleCNN(nn.ModuleList):
 
 
 
-
+skill='place'
 
 
 #directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs'
@@ -119,9 +119,9 @@ Batch_size=64
 
 def get_filenames_in_directory(directory):
     filenames = []
-    for filename in os.listdir(directory):
-        if filename.endswith('.pkl'):
-            filenames.append(os.path.join(directory, filename))
+    for filename in os.listdir(directory) :
+       # if filename.endswith('.pkl') and '{}_only_eval_dataset_ep_0'.format(skill) in filename:
+        filenames.append(os.path.join(directory, filename))
     return filenames
 
 
@@ -134,6 +134,10 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
     visual_obs=[]
     non_visual_obs=[]
     actions=[]
+    rewards=[]
+    next_visual_obs=[]
+    next_non_visual_obs=[]
+    done=[]
 
     number_of_steps=len(episode_data['action_to_save'])
     visual_features=torch.zeros( (number_of_steps, 512), dtype=torch.float32).to(device)
@@ -149,20 +153,28 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
    # print("last_action_repeated shape == " , last_action_repeated.shape)
     episode_data['action_to_save']=np.concatenate( (episode_data['action_to_save'], last_action_repeated), axis=0)
     #print("New action_to_save shape == " , episode_data['action_to_save'].shape)
-    for step in range(number_of_steps-num_prev_obs):
+    for step in range(number_of_steps-num_prev_obs-num_predicted_actions):
+
         vis_obs_step=[]
+        next_vis_obs_step=[]
         if step==0:
             for obs_idx in range(step,step+num_prev_obs):
                 vis_obs_step.append(visual_features[0])
+                next_vis_obs_step.append(visual_features[obs_idx+15])
            # print("vis_obs_step shape at step 0 == " , np.array(vis_obs_step).shape)
             visual_obs.append(np.array(vis_obs_step))
+            next_visual_obs.append(np.array(next_vis_obs_step))
             vis_obs_step=[]
+            next_vis_obs_step=[]
 
         for obs_idx in range(step,step+num_prev_obs):
             vis_obs_step.append(visual_features[obs_idx])
+            next_vis_obs_step.append(visual_features[obs_idx+20])
         visual_obs.append(np.array(vis_obs_step))
+        next_visual_obs.append(np.array(next_vis_obs_step))
 
         non_vis_obs_step=[]
+        next_non_vis_obs_step=[]
         if step==0:
             for obs_idx in range(step,step+num_prev_obs):
 
@@ -175,9 +187,23 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
                     episode_data['rob_qpos'][0],
                     np.array([int(episode_data['is_holding'][0])]),
                 ),axis=-1) )
+                next_non_vis_obs_step.append( np.concatenate((
+                    episode_data['rel_resting_pos'][obs_idx+15],
+                    episode_data['rel_pick_pos_ee'][obs_idx+15],
+                    episode_data['rel_place_pos_ee'][obs_idx+15],
+                    episode_data['rel_pick_pos_base_polar'][obs_idx+15],
+                    episode_data['rel_place_pos_base_polar'][obs_idx+15],
+                    episode_data['rob_qpos'][obs_idx+15],
+                    np.array([int(episode_data['is_holding'][obs_idx+15])]),
+                ),axis=-1) )
+
+
           #  print("non_vis_obs_step shape at step 0 == " , np.array(non_vis_obs_step).shape)
             non_visual_obs.append(np.array(non_vis_obs_step))
+            next_non_visual_obs.append(np.array(next_non_vis_obs_step))
+         #   rewards.append(np.array([-1]))
             non_vis_obs_step=[]
+            next_non_vis_obs_step=[]
 
         for obs_idx in range(step,step+num_prev_obs):
 
@@ -190,9 +216,34 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
                 episode_data['rob_qpos'][obs_idx],
                 np.array([int(episode_data['is_holding'][obs_idx])]),
             ),axis=-1) )
+            next_non_vis_obs_step.append( np.concatenate((
+                episode_data['rel_resting_pos'][obs_idx+20],
+                episode_data['rel_pick_pos_ee'][obs_idx+20],
+                episode_data['rel_place_pos_ee'][obs_idx+20],
+                episode_data['rel_pick_pos_base_polar'][obs_idx+20],
+                episode_data['rel_place_pos_base_polar'][obs_idx+20],
+                episode_data['rob_qpos'][obs_idx+20],
+                np.array([int(episode_data['is_holding'][obs_idx+20])]),
+            ),axis=-1) )
         non_visual_obs.append(np.array(non_vis_obs_step))
+        next_non_visual_obs.append(np.array(next_non_vis_obs_step))
+
+
+
+
+        if step==0:
+            rewards.append(np.array([0]))
+            done.append(np.array([0]))
+        if step == number_of_steps - num_prev_obs -num_predicted_actions - 1:
+            rewards.append(np.array([0]))
+            done.append(np.array([1]))
+        else:
+            rewards.append(np.array([0]))
+            done.append(np.array([0]))
+
 
         action_step=[]
+
         if step==0:
             for act_idx in range(step,step+num_predicted_actions):
                 action_step.append(episode_data['action_to_save'][act_idx])
@@ -204,9 +255,31 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
     #        print("action == " , episode_data['action_to_save'][act_idx])
             action_step.append(episode_data['action_to_save'][act_idx])
         actions.append(np.array(action_step))
+
+
+
+
+        ### for the placing task
+     #   print("episode_data['rel_place_pos_ee'][step+num_prev_obs] == ",episode_data['rel_place_pos_ee'][step+num_prev_obs])
+      #  input()
+
+
+
+
+        '''
+        if episode_data['is_holding'][step+num_prev_obs] ==0 and skill=='place':
+            print("placed the object, the added reward is 100 and breaking the loop")
+            rewards[-1]=np.array([100])
+            done[-1]=np.array([1])
+            break
+        '''
+
+
+
+
   #  print("actions shape == " , np.array(actions).shape)
    # input()
-    return np.array(visual_obs), np.array(non_visual_obs), np.array(actions)
+    return np.array(visual_obs), np.array(non_visual_obs), np.array(actions) , np.array(rewards), np.array(next_visual_obs), np.array(next_non_visual_obs), np.array(done)
 
 
 def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_actions=20):
@@ -214,12 +287,31 @@ def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_a
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")    
     print("device == " , device)
 
+    required_skill=skill
+    skill_files=[]
+    if required_skill!='nav' and required_skill!='pick' and required_skill!='place':
+        print("please set a valid skill among nav, pick, place")
+        input()
+
+    print("Collecting files for skill: ", required_skill )
+
     file_names= get_filenames_in_directory(upload_directory)
+    print("Total number of files in the directory: ", len(file_names) )
+    for file_name in file_names:
+        if required_skill in file_name:
+            skill_files.append(file_name)
+    print("Total number of files for skill {} : {}".format(required_skill, len(skill_files)) )
+    number_of_files=len(skill_files)
     file_visual_obs=[]
     file_non_visual_obs=[]
     file_action_obs=[]
-
-    for file_name in file_names:
+    file_rewards=[]
+    file_next_visual_obs=[]
+    file_next_non_visual_obs=[]
+    file_done=[]
+    number_of_processed_files=0
+    number_of_saved_parts=0
+    for file_name in skill_files:
 
         print("Processing file: ", file_name )
         with open(file_name, 'rb') as f:
@@ -229,20 +321,76 @@ def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_a
 
         for episode_key in data.keys():
             episode_data=data[episode_key]
-            visual_obs_data,non_visual_obs_data,action_data=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
+            visual_obs_data,non_visual_obs_data,action_data,rewards,next_visual_obs_data,next_non_visual_obs_data,done=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
+            if visual_obs_data.shape[0]==0:
+                print("Skipping episode ", episode_key , " due to zero valid steps after processing.")
+                continue
             file_visual_obs.append(visual_obs_data)
             file_non_visual_obs.append(non_visual_obs_data)
             file_action_obs.append(action_data)
-        print("Completed processing file: ", file_name )
-        print("Total episodes processed so far: ", len(file_visual_obs) )
-    visual_obs_data_all_episodes=np.concatenate(file_visual_obs,axis=0)
-    non_visual_obs_data_all_episodes=np.concatenate(file_non_visual_obs,axis=0)
-    action_data_all_episodes=np.concatenate(file_action_obs,axis=0)
-    visual_obs_data_all_episodes=torch.from_numpy(visual_obs_data_all_episodes)
-    non_visual_obs_data_all_episodes=torch.from_numpy(non_visual_obs_data_all_episodes)
-    action_data_all_episodes=torch.from_numpy(action_data_all_episodes)
+            file_rewards.append(rewards)
+            file_next_visual_obs.append(next_visual_obs_data)
+            file_next_non_visual_obs.append(next_non_visual_obs_data)
+            file_done.append(done)
+       # print("Completed processing file: ", file_name )
+        #print("Total episodes processed so far: ", len(file_visual_obs) )
+        number_of_processed_files+=1
 
-    return visual_obs_data_all_episodes, non_visual_obs_data_all_episodes, action_data_all_episodes
+        if number_of_processed_files % 20 ==0 or number_of_processed_files==number_of_files:
+            visual_obs_data_all_episodes=np.concatenate(file_visual_obs,axis=0)
+            non_visual_obs_data_all_episodes=np.concatenate(file_non_visual_obs,axis=0)
+            action_data_all_episodes=np.concatenate(file_action_obs,axis=0)
+            rewards_data_all_episodes=np.concatenate(file_rewards,axis=0)
+            next_visual_obs_data_all_episodes=np.concatenate(file_next_visual_obs,axis=0)
+            next_non_visual_obs_data_all_episodes=np.concatenate(file_next_non_visual_obs,axis=0)
+            done_data_all_episodes=np.concatenate(file_done,axis=0)
+
+            visual_obs_data_all_episodes=torch.from_numpy(visual_obs_data_all_episodes)
+            non_visual_obs_data_all_episodes=torch.from_numpy(non_visual_obs_data_all_episodes)
+            action_data_all_episodes=torch.from_numpy(action_data_all_episodes)
+            rewards_data_all_episodes=torch.from_numpy(rewards_data_all_episodes)
+            next_visual_obs_data_all_episodes=torch.from_numpy(next_visual_obs_data_all_episodes)
+            next_non_visual_obs_data_all_episodes=torch.from_numpy(next_non_visual_obs_data_all_episodes)
+            done_data_all_episodes=torch.from_numpy(done_data_all_episodes)
+            number_of_saved_parts+=1
+            print("Saving processed data part number {} to disk...".format(number_of_saved_parts) )
+            print("visual_obs_data_all_episodes shape == " , visual_obs_data_all_episodes.shape)
+            print("non_visual_obs_data_all_episodes shape == " , non_visual_obs_data_all_episodes.shape)
+            print("action_data_all_episodes shape == " , action_data_all_episodes.shape)
+            print("rewards_data_all_episodes shape == " , rewards_data_all_episodes.shape)
+            print("next_visual_obs_data_all_episodes shape == " , next_visual_obs_data_all_episodes.shape)
+            print("next_non_visual_obs_data_all_episodes shape == " , next_non_visual_obs_data_all_episodes.shape)
+            print("done_data_all_episodes shape == " , done_data_all_episodes.shape)
+
+            torch.save(visual_obs_data_all_episodes, os.path.join(save_directory, 'visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(non_visual_obs_data_all_episodes, os.path.join(save_directory, 'non_visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(action_data_all_episodes, os.path.join(save_directory, 'action_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(rewards_data_all_episodes, os.path.join(save_directory, 'rewards_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(next_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(next_non_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_non_visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(done_data_all_episodes, os.path.join(save_directory, 'done_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            print("finished saving processed data part number {} to disk.".format(number_of_saved_parts) )
+
+            file_visual_obs=[]
+            file_non_visual_obs=[]
+            file_action_obs=[]
+            file_rewards=[]
+            file_next_visual_obs=[]
+            file_next_non_visual_obs=[]
+            file_done=[]
+            visual_obs_data_all_episodes=None
+            non_visual_obs_data_all_episodes=None
+            action_data_all_episodes=None
+            rewards_data_all_episodes=None
+            next_visual_obs_data_all_episodes=None
+            next_non_visual_obs_data_all_episodes=None
+            done_data_all_episodes=None
+            print("Cleared accumulated data from memory after saving to disk.")
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    return None
+   # return visual_obs_data_all_episodes, non_visual_obs_data_all_episodes, action_data_all_episodes, rewards_data_all_episodes, next_visual_obs_data_all_episodes, next_non_visual_obs_data_all_episodes, done_data_all_episodes
 
     
 
@@ -264,10 +412,22 @@ upload_directory=directory
 save_directory=directory+'/processed_data'
 #save_directory='/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/accurate_data_5_aug/all_tasks_corrected_grasped_obs_26_aug/weights_diff_transformer'
 
-visual_obs_data_all_episodes, non_visual_obs_data_all_episodes, action_data_all_episodes=process_data(upload_directory,save_directory)
+process_data(upload_directory,save_directory)
+
+'''
+visual_obs_data_all_episodes, non_visual_obs_data_all_episodes, action_data_all_episodes,rewards_data_all_episodes,next_visual_obs_data_all_episodes, next_non_visual_obs_data_all_episodes, done_data_all_episodes=process_data(upload_directory,save_directory)
 print("visual_obs_data_all_episodes shape == " , visual_obs_data_all_episodes.shape)
 print("non_visual_obs_data_all_episodes shape == " , non_visual_obs_data_all_episodes.shape)
 print("action_data_all_episodes shape == " , action_data_all_episodes.shape)
-torch.save(visual_obs_data_all_episodes, os.path.join(save_directory, 'visual_obs_data_5_prev_obs.pt') )
-torch.save(non_visual_obs_data_all_episodes, os.path.join(save_directory, 'non_visual_obs_data_5_prev_obs.pt') )
-torch.save(action_data_all_episodes, os.path.join(save_directory, 'action_data_20_acts.pt') )
+print("rewards_data_all_episodes shape == " , rewards_data_all_episodes.shape)
+print("next_visual_obs_data_all_episodes shape == " , next_visual_obs_data_all_episodes.shape)
+print("next_non_visual_obs_data_all_episodes shape == " , next_non_visual_obs_data_all_episodes.shape)
+print("done_data_all_episodes shape == " , done_data_all_episodes.shape)
+torch.save(visual_obs_data_all_episodes, os.path.join(save_directory, 'visual_obs_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_ob_20_acts.pt'.format(skill)) )
+torch.save(non_visual_obs_data_all_episodes, os.path.join(save_directory, 'non_visual_obs_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_obs_20_acts.pt'.format(skill)) )
+torch.save(action_data_all_episodes, os.path.join(save_directory, 'action_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_obs_20_acts.pt'.format(skill)) )
+torch.save(rewards_data_all_episodes, os.path.join(save_directory, 'rewards_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_obs_20_acts.pt'.format(skill)) )
+torch.save(next_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_visual_obs_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_obs_20_acts.pt'.format(skill)) )
+torch.save(next_non_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_non_visual_obs_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_obs_20_acts.pt'.format(skill)) )
+torch.save(done_data_all_episodes, os.path.join(save_directory, 'done_data_{}_task_with_rewards_eval_dataset_ep_0_5_prev_obs_20_acts.pt'.format(skill)) )
+'''

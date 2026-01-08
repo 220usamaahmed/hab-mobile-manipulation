@@ -190,7 +190,7 @@ def main():
     if Transformer_policy:
         # Typical training checkpoint that already stored config + state_dict
         loader = SkillTransformerPolicyLoader.from_checkpoint(
-            ckpt_path="/home/shokry/skill_transformer/check_points/tidy_house/ckpt.54.pth",
+            ckpt_path="/home/shokry/skill_transformer/check_points/tidy_house/usama/ckpt.74.pth",
             device="cuda",             # or "cpu"
             strict=False,              # be forgiving across minor code/config changes
             strip_prefix="module.",    # remove DDP prefix if present
@@ -219,6 +219,8 @@ def main():
     episode_reward = 0
     failure_episodes = []
 
+    print("config.VIDEO_DIR == " , config.VIDEO_DIR)
+   # input()
     if args.save_video is not None:
         os.makedirs(config.VIDEO_DIR, exist_ok=True)
     rgb_frames = []
@@ -244,6 +246,8 @@ def main():
         rgb_frames = []
         episode_id = env.current_episode.episode_id
         scene_id = env.current_episode.scene_id
+
+        print("current episode ID == " , episode_id)
 
         
         #print("current episode == " , env.current_episode.target_receptacles[0][1])
@@ -407,7 +411,7 @@ def main():
 
             arm_action= out['actions'][0,:7]
             print("arm action == " , arm_action)
-            base_act= out['actions'][0,7:9]*3  ##scale for the navigation
+            base_act= out['actions'][0,7:9]*1.5  ##scale for the navigation
             print("base action == " , base_act)
             prev_gripper_action=torch.tensor([1]) if env.env._env._sim.gripper.is_grasped else torch.tensor([-1]).to(device)
             gripper_action= torch.argmax(out['actions'][0,9:12])
