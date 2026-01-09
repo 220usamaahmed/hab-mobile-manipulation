@@ -24,6 +24,6 @@ SOLUTION:
 
   ResetArm:
     TYPE: ResetArm
-    TIMEOUT: 50
+    TIMEOUT: 150
 
   ########################################################
