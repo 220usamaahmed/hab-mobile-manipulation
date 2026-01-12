@@ -266,7 +266,7 @@ class SimpleCNN(nn.ModuleList):
 
 Feat_ext = SimpleCNN(1, (128, 128), 512).to(device).to(torch.float32)
 Feat_ext.load_state_dict(torch.load(
-    '/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data/visual_encoder.pth',
+    '/home/user/siddiquieu1/HRL-Usama/mobile-manipulation/ahmed_checkpoints/visual_encoder.pth',
     map_location='cpu',
     weights_only=True
 ))
@@ -1450,7 +1450,7 @@ class PPOTrainerV0(BaseTrainer):
                 horizon=cfg.horizon,
             ).to(cfg.device)
 
-            ckpt = torch.load('/home/shokry/hab-mobile-manipulation/mobile_manipulation/q_training_runs/run_small_dataset/ckpt_step_4500.pt', map_location="cpu")
+            ckpt = torch.load('/home/user/siddiquieu1/HRL-Usama/mobile-manipulation/ahmed_checkpoints/ckpt_step_4500.pt', map_location="cpu")
 
             q_value_network.load_state_dict(ckpt["q_state_dict"])
 
