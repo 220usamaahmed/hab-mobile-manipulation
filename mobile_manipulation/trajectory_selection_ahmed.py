@@ -471,312 +471,99 @@ class Diffusion_buffer(Dataset):
         return self.len
     
     def _load_data(self):
-        data = {} 
-        data["actions"] = torch.cat((
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_9.pt")),
-                                torch.load(path.join(ROOT, "action_data_nav_task_p_10.pt")),
+        data = {}
+        # Define task types and their partition counts
+        tasks = [
+            ("nav_task", 10),
+            ("pick_task", 10),
+            ("place_task", 9),
+            # ("nav_task", 1),
+            # ("pick_task", 1),
+            # ("place_task", 1),
+        ]
 
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_9.pt")),
-                                torch.load(path.join(ROOT, "action_data_pick_task_p_10.pt")),
+        # Define data types and their file prefixes
+        data_types = {
+            "actions": "action_data",
+            "done": "done_data",
+            "non_visual_states": "non_visual_obs_data",
+            "visual_states": "visual_obs_data",
+            "rewards": "rewards_data",
+            "next_visual_states": "next_visual_obs_data",
+            "next_non_visual_states": "next_non_visual_obs_data",
+            "fake_actions": "predicted_actions_diffusion",
+        }
 
-
-                                torch.load(path.join(ROOT, "action_data_place_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "action_data_place_task_p_9.pt")),
-                                        
-                                ), dim=0)
-        
-
-        data["done"] = torch.cat((
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_9.pt")),
-                                torch.load(path.join(ROOT, "done_data_nav_task_p_10.pt")),
-                                
-                                
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_9.pt")),
-                                torch.load(path.join(ROOT, "done_data_pick_task_p_10.pt")),
-
-
-                                torch.load(path.join(ROOT, "done_data_place_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "done_data_place_task_p_9.pt")),
-                                
-                                ), dim=0)
-        
-
-
-        data["non_visual_states"] = torch.cat((
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_1.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_2.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_3.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_4.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_5.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_6.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_7.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_8.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_9.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_nav_task_p_10.pt")),
-
-
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_1.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_2.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_3.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_4.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_5.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_6.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_7.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_8.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_9.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_pick_task_p_10.pt")),
-
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_1.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_2.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_3.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_4.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_5.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_6.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_7.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_8.pt")),
-                                        torch.load(path.join(ROOT, "non_visual_obs_data_place_task_p_9.pt")),
-                                        
-                                        
-                                        ), dim=0)
-        
-        data["visual_states"] = torch.cat((
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_1.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_2.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_3.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_4.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_5.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_6.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_7.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_8.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_9.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_nav_task_p_10.pt")),
-
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_1.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_2.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_3.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_4.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_5.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_6.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_7.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_8.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_9.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_pick_task_p_10.pt")),
-
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_1.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_2.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_3.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_4.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_5.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_6.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_7.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_8.pt")),
-                                    torch.load(path.join(ROOT, "visual_obs_data_place_task_p_9.pt")),
-                                                                        
-                                    ), dim=0)
-        
-
-        data["rewards"]  = torch.cat((
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_9.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_nav_task_p_10.pt")),
-
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_9.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_pick_task_p_10.pt")),
-
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_1.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_2.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_3.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_4.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_5.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_6.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_7.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_8.pt")),
-                                torch.load(path.join(ROOT, "rewards_data_place_task_p_9.pt")),
-                                                                
-                                ), dim=0)
-        
-        data["next_visual_states"] = torch.cat((
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_1.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_2.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_3.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_4.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_5.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_6.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_7.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_8.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_9.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_nav_task_p_10.pt")),
-
-                                               torch.load( path.join(ROOT, "next_visual_obs_data_pick_task_p_1.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_2.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_3.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_4.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_5.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_6.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_7.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_8.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_9.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_pick_task_p_10.pt")),
-
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_1.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_2.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_3.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_4.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_5.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_6.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_7.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_8.pt")),
-                                                torch.load(path.join(ROOT, "next_visual_obs_data_place_task_p_9.pt")),
-                                                          
-                                                ), dim=0)
-        
-        data["next_non_visual_states"] = torch.cat((
-                                                torch.load(path.join(ROOT, "next_non_visual_obs_data_nav_task_p_1.pt")),
-                                                torch.load(path.join(ROOT, "next_non_visual_obs_data_nav_task_p_2.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_3.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_4.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_5.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_6.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_7.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_8.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_9.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_nav_task_p_10.pt")),
-
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_1.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_2.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_3.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_4.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_5.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_6.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_7.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_8.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_9.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_pick_task_p_10.pt")),
-
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_1.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_2.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_3.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_4.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_5.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_6.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_7.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_8.pt")),
-                                               torch.load( path.join(ROOT, "next_non_visual_obs_data_place_task_p_9.pt")),
-                                  
-                                                ), dim=0)
-        
-
-        data["fake_actions"] = torch.cat((
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_1.pt")),
-                                            torch.load(path.join(ROOT, "predicted_actions_diffusion_nav_task_p_2.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_3.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_4.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_5.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_6.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_7.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_8.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_9.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_nav_task_p_10.pt")),
-
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_1.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_2.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_3.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_4.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_5.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_6.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_7.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_8.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_9.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_pick_task_p_10.pt")),
-
-                                          torch.load(  path.join(ROOT, "predicted_actions_diffusion_place_task_p_1.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_place_task_p_2.pt")),
-                                          torch.load(  path.join(ROOT, "predicted_actions_diffusion_place_task_p_3.pt")),
-                                          torch.load(  path.join(ROOT, "predicted_actions_diffusion_place_task_p_4.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_place_task_p_5.pt")),
-                                          torch.load(  path.join(ROOT, "predicted_actions_diffusion_place_task_p_6.pt")),
-                                          torch.load(  path.join(ROOT, "predicted_actions_diffusion_place_task_p_7.pt")),
-                                           torch.load( path.join(ROOT, "predicted_actions_diffusion_place_task_p_8.pt")),
-                                          torch.load(  path.join(ROOT, "predicted_actions_diffusion_place_task_p_9.pt")),
-                                            
-                                            ), dim=0)
-         
+        # Load all data using loops
+        for data_key, file_prefix in data_types.items():
+            tensors = []
+            for task_name, num_partitions in tasks:
+                for p in range(1, num_partitions + 1):
+                    print("Loading partition", p, task_name)
+                    file_name = f"{file_prefix}_{task_name}_p_{p}.pt"
+                    # file_name = f"{file_prefix}_{task_name}_p_1.pt"
+                    tensors.append(
+                        torch.load(
+                            path.join(ROOT, file_name),
+                            # map_location=torch.device("cpu"),
+                        )
+                    )
+            data[data_key] = torch.cat(tensors, dim=0)
 
         if not data["done"][-1]:
             data["done"][-1] = True
 
         print("Loaded data:")
-        print("Actions", data["actions"].shape)
-        print("Done", data["done"].shape)
-        print("Non-Visual Obs", data["non_visual_states"].shape)
-        print("Visual Obs", data["visual_states"].shape)
-        print("Rewards", data["rewards"].shape)
-        print("Next Non-Visual Obs", data["next_non_visual_states"].shape)
-        print("Next Visual Obs", data["next_visual_states"].shape)
-        print("Fake Actions", data["fake_actions"].shape)
+        print(
+            "Actions",
+            data["actions"].shape,
+            data["actions"].device,
+            _mem_usage(data["actions"]),
+        )
+        print(
+            "Done",
+            data["done"].shape,
+            data["done"].device,
+            _mem_usage(data["done"]),
+        )
+        print(
+            "Non-Visual Obs",
+            data["non_visual_states"].shape,
+            data["non_visual_states"].device,
+            _mem_usage(data["non_visual_states"]),
+        )
+        print(
+            "Visual Obs",
+            data["visual_states"].shape,
+            data["visual_states"].device,
+            _mem_usage(data["visual_states"]),
+        )
+        print(
+            "Rewards",
+            data["rewards"].shape,
+            data["rewards"].device,
+            _mem_usage(data["rewards"]),
+        )
+        print(
+            "Next Non-Visual Obs",
+            data["next_non_visual_states"].shape,
+            data["next_non_visual_states"].device,
+            _mem_usage(data["next_non_visual_states"]),
+        )
+        print(
+            "Next Visual Obs",
+            data["next_visual_states"].shape,
+            data["next_visual_states"].device,
+            _mem_usage(data["next_visual_states"]),
+        )
+        print(
+            "Fake Actions",
+            data["fake_actions"].shape,
+            data["fake_actions"].device,
+            _mem_usage(data["fake_actions"]),
+        )
 
-
+        print(torch.cuda.memory_allocated() / 1024**2, "MB")
 
         data["rewards"] = data["rewards"].squeeze()
         data["done"] = data["done"].squeeze()
@@ -791,9 +578,11 @@ class Diffusion_buffer(Dataset):
         # This gives us the initial value for all returns in each state
 
         for i in range(data["returns"].shape[0] - 1, -1, -1):
-            last = data["rewards"][i] + Discount_factor * last * (1. - data["done"][i])
+            last = data["rewards"][i] + Discount_factor * last * (
+                1.0 - data["done"][i]
+            )
             data["returns"][i] = last
-        
+
         return data
     
     def update_returns(self, score_model):
