@@ -505,7 +505,7 @@ class Diffusion_buffer(Dataset):
                     tensors.append(
                         torch.load(
                             path.join(ROOT, file_name),
-                            # map_location=torch.device("cpu"),
+                            map_location=torch.device("cpu"),
                         )
                     )
             data[data_key] = torch.cat(tensors, dim=0)
