@@ -99,6 +99,7 @@ class SkillTransformerPolicyLoader:
         - If you pass override_config, it will take precedence (useful to tweak batch size, paths, etc.).
         """
         assert os.path.isfile(ckpt_path), f"Checkpoint not found: {ckpt_path}"
+
         ckpt = torch.load(ckpt_path, map_location=map_location)
       #  print("checkpoint keys:", ckpt['state_dict'].keys())
        # input()

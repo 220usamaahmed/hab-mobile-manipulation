@@ -1,0 +1,30 @@
+
+
+in the init function of the Diffusion_buffer?
+we updated the return values, and calculate the mean and variance, however, we didn't normailze the returns values and update them in the stored return values of the dataset
+
+
+in     def update_returns(self, score_model):
+in the Diffusion_buffer class
+the last line update the self.rewards, however, i guess it should be self.returns instead of rewards
+
+
+the logic of update_returns( function is not correct
+First we reset the q value network and train it based on the returns from the previous iteration
+then after training the q value, we evaluate the actions produced by the diffusion policy
+then after this we go backward through all the samples in the collected trajectories
+and first choose the maximum of the previously stored retrun value and the expected value by the q network
+then update the return values for the next iteration
+
+I also feel that this part is incorrect, in the same function
+        if self.normalise_return:
+            values = values * self.returns_std + self.returns_mean
+            
+            
+in def critic():
+is it ok to add the uploaded diffusion actions after defining the dataloader? 
+
+
+
+the train_critic( ) function is totally wrong.
+the actions fed to the q networka re the actions from the collected dataset not the actions from the diffusion policy

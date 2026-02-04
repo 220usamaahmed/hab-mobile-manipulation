@@ -371,14 +371,14 @@ def predict_diffusion_actions(data_directory,diffusion_model_directory,skill='',
     predicted_actions=None
     batch_size=2000
     
-    for i in range(1):
-        if skill == 'place' and i==4:
-            break
+    for i in [9]:
+       # if skill == 'place' and i==9:
+        #    break
         #next_visual_obs,next_non_visual_obs=upload_next_observation_data(data_directory,skill)
-        next_visual_obs=torch.load(os.path.join(data_directory, 'next_visual_obs_data_{}_task_p_{}.pt'.format(skill,i+1+9))).to(device)
-        next_non_visual_obs=torch.load(os.path.join(data_directory, 'next_non_visual_obs_data_{}_task_p_{}.pt'.format(skill,i+1+9))).to(device)
-        print("uploaded next visual obs shape for {} task part {} == ".format(skill,i+1+9) , next_visual_obs.shape)
-        print("uploaded next non visual obs shape for {} task part {} == ".format(skill,i+1+9) , next_non_visual_obs.shape)
+        next_visual_obs=torch.load(os.path.join(data_directory, 'next_visual_obs_data_{}_task_p_{}.pt'.format(skill,i))).to(device)
+        next_non_visual_obs=torch.load(os.path.join(data_directory, 'next_non_visual_obs_data_{}_task_p_{}.pt'.format(skill,i))).to(device)
+        print("uploaded next visual obs shape for {} task part {} == ".format(skill,i) , next_visual_obs.shape)
+        print("uploaded next non visual obs shape for {} task part {} == ".format(skill,i) , next_non_visual_obs.shape)
         number_of_samples=next_visual_obs.shape[0]
         number_of_iterations=math.ceil(number_of_samples/batch_size)
         for s in range(number_of_iterations):
@@ -398,10 +398,16 @@ def predict_diffusion_actions(data_directory,diffusion_model_directory,skill='',
             else:
                 predicted_actions=torch.cat((predicted_actions,predicted_actions_step),dim=0)
 
-            print("finished step {} out of {} for {} task part {} at time {}".format(s+1,number_of_iterations,skill,i+1+9,datetime.now().strftime("%H:%M:%S")))
+            print("finished step {} out of {} for {} task part {} at time {}".format(s+1,number_of_iterations,skill,i,datetime.now().strftime("%H:%M:%S")))
         print("final predicted actions shape == " , predicted_actions.shape)
         #input()
-        torch.save(predicted_actions, os.path.join(data_directory, 'predicted_actions_diffusion_{}_task_p_{}.pt'.format(skill,i+1+9)))
+        torch.save(predicted_actions, os.path.join(data_directory, 'predicted_actions_diffusion_{}_task_p_{}.pt'.format(skill,i)))
+        if predicted_actions.shape[0] == next_non_visual_obs.shape[0]:
+            print("Number of actions and observations match!")
+        else:
+            print("Number of actions and observations do not match!")
+            input()
+        predicted_actions=None  # Reset for the next part
 
         
         
@@ -417,7 +423,7 @@ if __name__ == "__main__":
    # data_directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data'
     diffusion_model_directory='/lustre/mlnvme/data/s47ashok_hpc-data/new_accurate_data_individual_tasks_4_jan_2026/weights_pretrained_visual_encoder/pretrained_visual_encoder_2200.pt'
     #diffusion_model_directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data/processed_data/marvin_weights/pretrained_visual_encoder_2190.pt'
-    predict_diffusion_actions(data_directory,diffusion_model_directory,skill='pick')
+    predict_diffusion_actions(data_directory,diffusion_model_directory,skill='place')
    
 
 

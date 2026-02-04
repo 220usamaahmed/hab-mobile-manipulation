@@ -56,6 +56,8 @@ class SetArticulatedObjectTask(RearrangeTask):
         self._sim.robot.base_pos = start_state[0]
         self._sim.robot.base_ori = start_state[1]
         self._sim.internal_step_by_time(0.1)
+        
+
 
     def _set_marker(self, episode):
         raise NotImplementedError
@@ -177,6 +179,9 @@ class RearrangeOpenDrawerTask(SetArticulatedObjectTask):
     def _set_marker(self, episode: RearrangeEpisode):
         self.tgt_obj, self.tgt_T = self._sim.get_target(0)
         self.pick_goal = np.array(self.tgt_obj.translation, dtype=np.float32)
+        self.place_goal = np.array(
+                self.tgt_T.translation, dtype=np.float32
+            )
 
         # Find corresponding marker given target receptacle info
         receptacle_handle, receptacle_link_id = episode.target_receptacles[0]

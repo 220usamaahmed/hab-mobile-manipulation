@@ -26,6 +26,8 @@ class RearrangeNavTask(RearrangeTask):
         sim_state = self._sim.get_state()  # snapshot
         self.sub_task = None
         is_initialized = False  # whether nav_goals is set
+        
+
 
         n_targets = len(self._sim.targets)
         if "TARGET_INDEX" in self._config:
@@ -39,7 +41,7 @@ class RearrangeNavTask(RearrangeTask):
 
 
 
-      #  tgt_indices=[1]
+        tgt_indices=[0]
 
 
 
@@ -47,10 +49,11 @@ class RearrangeNavTask(RearrangeTask):
         for tgt_idx in tgt_indices:
             self.target_index=tgt_idx
             self._set_target(tgt_idx)
-       #     print("target index == " , tgt_idx)
+
          #   print("episode.episode_id == " , episode.episode_id)
          #   input()
             supported_tasks = self._get_supported_tasks()
+
             supported_tasks = self.np_random.permutation(
                 supported_tasks
             ).tolist()
@@ -70,8 +73,15 @@ class RearrangeNavTask(RearrangeTask):
           #  print("place object specs == " , self.tgt_T )
             
            # input()
-          #  supported_tasks=["pick"]
+           
+           
+           
+          #  supported_tasks=["open_drawer"]
+            
+            
+
             for sub_task in supported_tasks:
+
                 self._set_sub_task(sub_task)
                 self._initialize_target_receptacle()
                 is_initialized = self._initialize_goals(episode)
@@ -115,15 +125,20 @@ class RearrangeNavTask(RearrangeTask):
     def _get_supported_tasks(self):
         supported_tasks = ["pick", "place"]
         n_targets = len(self._sim.targets)
+
+        
         # NOTE(jigu): hardcode, using n_targets to distinguish SetTable
         if self._has_target_in_fridge() and n_targets == 2:
+            
             supported_tasks.extend(["open_fridge", "close_fridge"])
         elif self._has_target_in_drawer() and n_targets == 2:
+
             supported_tasks.extend(["open_drawer", "close_drawer"])
+
         supported_tasks = [
             x for x in supported_tasks if x in self._config.SUB_TASKS
         ]
-        # print(supported_tasks)
+
         return supported_tasks
 
     def _set_sub_task(self, sub_task):
@@ -177,6 +192,7 @@ class RearrangeNavTask(RearrangeTask):
             self.init_start_pos = np.array(T.transform_point(offset))
 
         elif self._has_target_in_drawer():
+
             self.tgt_receptacle = art_obj_mgr.get_object_by_handle(
                 receptacle_handle
             )
@@ -186,6 +202,7 @@ class RearrangeNavTask(RearrangeTask):
 
             # Open the drawer
             if self.sub_task in ["pick", "place", "close_drawer"]:
+
                 init_range = self._config.get("DRAWER_INIT_RANGE", [0.5, 0.5])
                 init_qpos = self.np_random.uniform(*init_range)
 
@@ -240,6 +257,7 @@ class RearrangeNavTask(RearrangeTask):
 
         receptacle_link_id = self.tgt_receptacle_info[1]
         if self.sub_task == "open_drawer":
+            input()
             marker_name = "cab_push_point_{}".format(receptacle_link_id)
             self.marker = self._sim.markers[marker_name]
             self.spawn_region = mn.Range2D([0.80, -0.35], [0.95, 0.35])
@@ -269,6 +287,7 @@ class RearrangeNavTask(RearrangeTask):
             self.nav_goal = self.sample_nav_goal_within_region(
                 self.spawn_region, self.spawn_T
             )
+            
             if self.nav_goal is None:
                 return False
 

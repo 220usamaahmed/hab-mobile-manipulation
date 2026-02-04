@@ -1,10 +1,10 @@
 __BASE__: "{fileDirname}/../base.yaml"
 
 DATASET:
-  DATA_PATH: "data/datasets/rearrange/v3/set_table_220417_{split}.json.gz" 
+  DATA_PATH: "data/datasets/rearrange/v3/set_table_220417_train.json.gz" 
   #DATA_PATH: "data/datasets/rearrange/v1/minival/rearrange.json.gz"
 ENVIRONMENT:
-  MAX_EPISODE_STEPS: 4500
+  MAX_EPISODE_STEPS: 5000
 
 TASK:
   TYPE: SetTableTask-v0

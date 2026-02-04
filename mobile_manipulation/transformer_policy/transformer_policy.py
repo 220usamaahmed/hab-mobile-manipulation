@@ -625,6 +625,7 @@ class TransformerResNetPolicy(NetPolicy):
         deterministic: bool = True,
         rtgs: torch.Tensor = None,
         envs_to_pause=None,
+        
     ) -> Dict[str, Any]:
         """
         Produce the action for the *next single time step* for each environment.
@@ -1101,7 +1102,9 @@ class TransformerResnetNet(nn.Module):
 
         current_context = torch.argmax(
             (rnn_hidden_states.sum(-1) == 0).float(), -1
-        )          ### find the current context (time step in the window size) index
+        )
+         
+        ### find the current context (time step in the window size) index
   #      print("rnn  hiden state shape == " , rnn_hidden_states.shape)
    #     print("rnn_hidden_states.sum(-1) == " , rnn_hidden_states.sum(-1).shape)
         
@@ -1124,10 +1127,19 @@ class TransformerResnetNet(nn.Module):
             torch.arange(B), current_context, :- (action_dim+1)  ### only state, without actions or skill
         ] = x.view(B, -1).float()
         
+        
+        
         # Write actions to context
-        rnn_hidden_states[
-            torch.arange(B), current_context, -action_dim:
-        ] = prev_actions.view(B, -1).float()
+        
+        if current_context>0:
+            rnn_hidden_states[
+                torch.arange(B), current_context-1, -action_dim:
+            ] = prev_actions.view(B, -1).float()
+
+            
+
+        
+        
       #  print("prev acts == " , prev_actions.view(B, -1).float())
         out, predicted_dist = self.planner_encoder(
             rnn_hidden_states[..., :-(action_dim+1)],

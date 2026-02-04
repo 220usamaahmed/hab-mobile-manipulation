@@ -71,6 +71,7 @@ import random
 from torch.utils.data import IterableDataset
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 
@@ -144,8 +145,11 @@ def imagine_trajectories(env , action_trajectories,gripper_is_grasped,similarity
 
         if env.env._env._sim.gripper.is_grasped :
             gripped=True
-            
-            
+
+        #print("current traj idx == " , traj)
+        #input()
+
+
 
     #    print("finished imagined trajectory number {}".format(traj))
      #   print("target index == " ,env.env._env._task.tgt_idx)
@@ -275,61 +279,218 @@ Feat_ext.eval()
 
 
 
-number_of_mc_dropout_samples=20
+number_of_mc_dropout_samples=10
 
-def best_traj_q_value(q_value_network, visual_obs, non_visual_obs_buffer, actions):
+def best_traj_q_value(flow_matching_policy,q_value_network, head_depth_obs, arm_depth_obs , non_visual_obs_buffer, actions):
 
-    visual_obs=torch.from_numpy(visual_obs).to(device)
+
+    minus_weights=True
+    inverse_weights=False
+    if minus_weights and inverse_weights or (not minus_weights and not inverse_weights):
+        print("Error: both minus_weights and inverse_weights are set to the same value.")
+        return -1
+    
+
+    head_depth_obs=torch.from_numpy(head_depth_obs).to(device)
+    arm_depth_obs=torch.from_numpy(arm_depth_obs).to(device)
     non_visual_obs_buffer=torch.from_numpy(non_visual_obs_buffer).to(device).to(torch.float32)
-    if len(visual_obs.shape)==5:
-        visual_obs=visual_obs.permute(0,1,4,2,3) 
+    if len(head_depth_obs.shape)==5:
+        head_depth_obs=head_depth_obs.permute(0,1,4,2,3)
+        arm_depth_obs=arm_depth_obs.permute(0,1,4,2,3) 
         # arranged_visual_obs=rearrange(visual_obs, 'b s c h w -> (b s) c h w')
 
-        visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+        head_depth_obs=flow_matching_policy.head_depth_encoder(rearrange(head_depth_obs, 'b s c h w -> (b s) c h w'))
+        arm_depth_obs=flow_matching_policy.arm_depth_encoder(rearrange(arm_depth_obs, 'b s c h w -> (b s) c h w'))
 
-    elif len(visual_obs.shape)==4:
-        visual_obs=visual_obs.permute(0,3,1,2)
-        visual_obs=Feat_ext(visual_obs)
+    elif len(head_depth_obs.shape)==4:
+        head_depth_obs=head_depth_obs.permute(0,3,1,2)
+        arm_depth_obs=arm_depth_obs.permute(0,3,1,2)
+        head_depth_obs=flow_matching_policy.head_depth_encoder(head_depth_obs)
+        arm_depth_obs=flow_matching_policy.arm_depth_encoder(arm_depth_obs)
 
     num_trajectories=actions.shape[0]
-    visual_obs=visual_obs.repeat(num_trajectories,1,1)
+    head_depth_obs=head_depth_obs.repeat(num_trajectories,1,1)
+    arm_depth_obs=arm_depth_obs.repeat(num_trajectories,1,1)
     non_visual_obs_buffer=non_visual_obs_buffer.repeat(num_trajectories,1,1)
 
-
-  #  actions=torch.from_numpy(actions).to(device)
- #   print("visual obs buffer shape == " , visual_obs_buffer.shape)
-  #  print("non visual obs buffer shape == " , non_visual_obs_buffer.shape)
-  #  print("actions shape == " , actions.shape)
     q_values_concatenated=None
     with torch.no_grad():
         for t in range(number_of_mc_dropout_samples):
-            q_values=q_value_network(visual_obs, non_visual_obs_buffer, actions)
+            q_values=q_value_network(head_depth_obs, arm_depth_obs, non_visual_obs_buffer, actions)
             q_values=q_values.unsqueeze(-1)
             if q_values_concatenated is None:
                 q_values_concatenated=q_values
             else:
                 q_values_concatenated=torch.cat((q_values_concatenated,q_values),dim=1)
+
     q_values_mean=torch.mean(q_values_concatenated,dim=1,keepdim=True)
     q_values_std=torch.std(q_values_concatenated,dim=1,keepdim=True)
-    q_values_mean_max=torch.max(q_values_mean,dim=0)
-    q_values_mean_min=torch.min(q_values_mean,dim=0)
-    q_values_means_nomralized=(q_values_mean - q_values_mean_min.values)/(q_values_mean_max.values - q_values_mean_min.values+1e-8)
-    q_values_std_max=torch.max(q_values_std,dim=0)
-    q_values_std_min=torch.min(q_values_std,dim=0)
-    q_values_std_normalized=(q_values_std - q_values_std_min.values)/(q_values_std_max.values - q_values_std_min.values+1e-8)
-    print("q values concatenated == " , q_values_concatenated)
-    print("q values mean == " , q_values_mean)
-    print("q values std == " , q_values_std)
-    #input()
-    weighted_q_values=q_values_means_nomralized * (1-q_values_std_normalized)
-    print("q values means normalized == " , q_values_means_nomralized)
-    print("q values std normalized == " , q_values_std_normalized)
-    print("weighted q values == " , weighted_q_values)
+
+    if minus_weights:
+        q_values_mean_max=torch.max(q_values_mean,dim=0)
+        q_values_mean_min=torch.min(q_values_mean,dim=0)
+        q_values_means_nomralized=(q_values_mean - q_values_mean_min.values)/(q_values_mean_max.values - q_values_mean_min.values+1e-8)
+        q_values_std_max=torch.max(q_values_std,dim=0)
+        q_values_std_min=torch.min(q_values_std,dim=0)
+        q_values_std_normalized=(q_values_std - q_values_std_min.values)/(q_values_std_max.values - q_values_std_min.values+1e-8)
+    # print("q values concatenated == " , q_values_concatenated)
+        print("q values mean == " , q_values_mean)
+        print("q values std == " , q_values_std)
+        #input()
+        weighted_q_values=q_values_means_nomralized * (1-q_values_std_normalized)
+    # print("q values means normalized == " , q_values_means_nomralized)
+        #print("q values std normalized == " , q_values_std_normalized)
+        print("weighted q values == " , weighted_q_values)
+
+    #elif inverse_weights:
+
     best_traj_idx=torch.argmax(weighted_q_values.squeeze(-1))
     print("best traj index == " , best_traj_idx)
     print("best q value == " , weighted_q_values[best_traj_idx])
     return best_traj_idx
     
+
+
+
+
+
+
+
+
+
+
+
+@torch.no_grad()
+def sample_actions_flow_matching(
+    model,
+    
+    head_depth: torch.Tensor,
+    arm_depth: torch.Tensor,
+    non_visual_obs: torch.Tensor,
+    num_predicted_actions: int = 10,
+    device: Optional[torch.device] = None,
+    action_len: int = 20,
+    action_dim: int = 10,
+    num_steps: int = 50,
+    method: str = "heun",
+):
+    """
+    Flow Matching sampler (ODE integration):
+        dx/dt = v_theta(x, t, cond),  t in [0, 1]
+    Start:
+        x(0) ~ N(0, I)
+    Output:
+        x(1)
+    """
+    model.eval()
+    if device is None:
+        device = head_depth.device
+
+    head_depth = head_depth.to(device=device, dtype=torch.float32)
+    arm_depth = arm_depth.to(device=device, dtype=torch.float32)
+    head_depth=head_depth.repeat(num_predicted_actions,1,1,1,1)  # Repeat condition for batch size
+    arm_depth=arm_depth.repeat(num_predicted_actions,1,1,1,1)
+    non_visual_obs = non_visual_obs.to(device=device, dtype=torch.float32)
+    non_visual_obs = non_visual_obs.repeat(num_predicted_actions, 1,1)
+
+    x = torch.randn((num_predicted_actions, action_len, action_dim), device=device, dtype=torch.float32)
+
+    dt = 1.0 / num_steps
+    for k in range(num_steps):
+        t_k = k * dt
+        t_k_tensor = torch.tensor(t_k, device=device, dtype=torch.float32)
+        t_k_tensor = t_k_tensor.unsqueeze(0)
+
+
+        #t_k_tensor = torch.full((num_predicted_actions,), t_k, device=device, dtype=torch.float32)
+        #print("t k tensor == " , t_k_tensor)
+       # t_k_tensor=t_k_tensor.unsqueeze(-1)
+
+        #print("t_k tensor shape in flow matching sampler == " , t_k_tensor.shape)
+        v_k = model(head_depth,arm_depth , non_visual_obs, x, t_k_tensor)
+
+        if method.lower() == "euler":
+            x = x + dt * v_k
+        elif method.lower() == "heun":
+            x_pred = x + dt * v_k
+            t_k1 = (k + 1) * dt
+            #t_k1_tensor = torch.full((num_predicted_actions,), t_k1, device=device, dtype=torch.float32)
+            t_k1_tensor = torch.tensor( t_k1, device=device, dtype=torch.float32)
+            t_k1_tensor = t_k1_tensor.unsqueeze(0)
+            v_k1 = model(head_depth,arm_depth, non_visual_obs, x_pred, t_k1_tensor)
+            x = x + 0.5 * dt * (v_k + v_k1)
+        else:
+            raise ValueError(f"Unknown method: {method}. Use 'euler' or 'heun'.")
+
+    return x
+
+
+
+
+
+class FlowMatchingScheduler:
+    """
+    Rectified Flow / Flow Matching training objective.
+
+    We define a path from noise x0 ~ N(0,I) to data x1 (target actions):
+        x_t = (1 - t) * x0 + t * x1,   where t in [0,1]
+
+    The target velocity field along this path is:
+        v* = d x_t / dt = x1 - x0
+
+    The model is trained to predict v*(x_t, t, cond) via MSE loss.
+    """
+
+    def __init__(self, eps: float = 1e-5):
+        self.eps = eps  # not strictly needed; kept for potential numerical guards
+
+    def sample_xt_and_v(self, x1: torch.Tensor, t: torch.Tensor):
+        """
+        Args:
+            x1: target actions, shape (B, L, D) or (B, D)
+            t: continuous times in [0,1], shape (B,)
+
+        Returns:
+            x_t: interpolated actions at time t, same shape as x1
+            v:   target velocity, same shape as x1
+            x0:  sampled noise start, same shape as x1
+        """
+
+        x0 = torch.randn_like(x1)
+
+        # reshape t for broadcasting over x1
+        while t.dim() < x1.dim():
+            t = t.unsqueeze(-1)
+
+        
+        x_t = (1.0 - t) * x0 + t * x1
+        
+        v = x1 - x0
+
+        
+        return x_t, v, x0
+
+    def get_loss(self, model, x1, t, head_depth_batch,arm_depth_batch, non_visual_obs_batch):
+        """
+        Model now predicts velocity v at x_t (NOT noise epsilon).
+        Signature matches the original diffusion scheduler for minimal code changes.
+        """
+
+        x_t, v, _ = self.sample_xt_and_v(x1, t)
+        v_pred = model(
+            head_depth_batch.to(torch.float32),
+            arm_depth_batch.to(torch.float32),
+            non_visual_obs_batch.to(torch.float32),
+            x_t.to(torch.float32),
+            t.to(torch.float32),
+        )
+        return F.mse_loss(v_pred, v)
+
+
+
+
+
+
 
 
 
@@ -430,8 +591,13 @@ class ConditionalDiffusionModel(nn.Module):
 
     #    self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
-        self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
+        self.head_depth_projection= nn.Linear(depth_features_dim, hidden_dim)
+        self.arm_depth_projection= nn.Linear(depth_features_dim, hidden_dim)
         self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
+
+        self.head_depth_encoder = SimpleCNN(1, (128, 128), depth_features_dim)
+        self.arm_depth_encoder = SimpleCNN(1, (128, 128), depth_features_dim)
+
 
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(hidden_dim),
@@ -446,10 +612,10 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=16)  # Sensor position embedding
 
 
-    def forward(self, visual_obs, non_visual_obs, noisy_action, t):
+    def forward(self, head_depth_images, arm_depth_images , non_visual_obs, noisy_action, t):
 
         batch_size=non_visual_obs.shape[0]
         context_length=non_visual_obs.shape[1]
@@ -459,23 +625,26 @@ class ConditionalDiffusionModel(nn.Module):
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
 
        # print("initial visual observation shape == " , visual_obs.shape)
-        if len(visual_obs.shape)==5:
-            visual_obs=visual_obs.permute(0,1,4,2,3) 
-           # arranged_visual_obs=rearrange(visual_obs, 'b s c h w -> (b s) c h w')
+        if len(head_depth_images.shape)==5:
+            head_depth_images=head_depth_images.permute(0,1,4,2,3) 
+            arm_depth_images=arm_depth_images.permute(0,1,4,2,3)
+       #     visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+        elif len(head_depth_images.shape)==4:
+            head_depth_images=head_depth_images.permute(0,3,1,2)
+            arm_depth_images=arm_depth_images.permute(0,3,1,2)
+         #   visual_obs=Feat_ext(visual_obs)
 
-            visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
-
-        elif len(visual_obs.shape)==4:
-            visual_obs=visual_obs.permute(0,3,1,2)
-            visual_obs=Feat_ext(visual_obs)
-
-        visual_obs=visual_obs.reshape(batch_size*context_length, -1)  # Reshape to (batch_size * context_length, feature_dim)
-
+        head_depth_images=head_depth_images.reshape(batch_size*context_length, head_depth_images.shape[-3], head_depth_images.shape[-2], head_depth_images.shape[-1])
+        arm_depth_images=arm_depth_images.reshape(batch_size*context_length, arm_depth_images.shape[-3], arm_depth_images.shape[-2], arm_depth_images.shape[-1])
+        head_depth_features=self.head_depth_encoder(head_depth_images.to(torch.float32))
+        arm_depth_features=self.arm_depth_encoder(arm_depth_images.to(torch.float32))
+        head_depth_features=head_depth_features.reshape(batch_size, context_length, -1)
+        arm_depth_features=arm_depth_features.reshape(batch_size, context_length, -1)
 
 
-        visual_obs=self.visual_obs_projection(visual_obs.to(torch.float32))  
-       # print("shape after visual feature projection == " , visual_obs.shape )
-        visual_obs=visual_obs.reshape(batch_size, context_length, -1)  
+        head_depth_features=self.head_depth_projection(head_depth_features.to(torch.float32))
+        arm_depth_features=self.arm_depth_projection(arm_depth_features.to(torch.float32))
+
 
 
        # print("shape after reshaping back to batch and context length == " , visual_obs.shape )
@@ -489,8 +658,12 @@ class ConditionalDiffusionModel(nn.Module):
         t=t.repeat(batch_size, 1, 1)  # Repeat to match action sequence length
      #   print("t shape after embedding == " , t.shape)
 
-        encoder_input=torch.cat((visual_obs,non_visual_obs,t),dim=1)
-       # print("encoder input shape == " , encoder_input.shape)
+        encoder_input=torch.zeros((batch_size, (context_length*3)+1, non_visual_obs.shape[-1])).to(torch.float32).to(non_visual_obs.device)
+
+        encoder_input[:,0:-2:3,:]=head_depth_features
+        encoder_input[:,1::3,:]=arm_depth_features
+        encoder_input[:,2::3,:]=non_visual_obs
+        encoder_input[:, -1, :]=t.squeeze(1)           # print("encoder input shape == " , encoder_input.shape)
         encoder_input=self.encoder_position_embedding(encoder_input)  # Apply sensor position embedding
 
         decoder_input=torch.cat((t,noisy_action),dim=1)
@@ -498,104 +671,12 @@ class ConditionalDiffusionModel(nn.Module):
         decoder_input = self.decoder_position_embedding(decoder_input)  # Apply action position embedding
 
         
-
         for block in self.transformer_blocks:
             decoder_input = block(decoder_input, encoder_input)
         out=self.output_proj(decoder_input)
         out=out[:,1:,:]
      #   print("final out shape == " , out.shape)
         return out             
-
-
-# Noise Scheduler (like DDPM)
-class NoiseScheduler:
-    def __init__(self, timesteps=500, beta_start=1e-4, beta_end=0.02):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-       # device = torch.device("cpu")
-        self.timesteps = timesteps
-        self.betas = torch.linspace(beta_start, beta_end, timesteps).to(device)
-        self.alphas = 1.0 - self.betas
-        
-        self.alpha_cumprod = torch.cumprod(self.alphas, dim=0).to(device)
-
-    def q_sample(self, x_start, t, noise=None):
-        if noise is None:
-            noise = torch.randn_like(x_start)
-        t=torch.reshape(t, (x_start.shape[0],-1))  # Ensure t is a 1D tensor
-        sqrt_alpha_cumprod = self.alpha_cumprod[t].sqrt().unsqueeze(1)
-        sqrt_one_minus_alpha_cumprod = (1. - self.alpha_cumprod[t]).sqrt().unsqueeze(1)
-        x_new=sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
-        return sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
-
-    def get_loss(self, model, x_start, t, visual_obs_batch , non_visual_obs_batch): 
-        noise = torch.randn_like(x_start).to(torch.float32)
-        noisy_action = self.q_sample(x_start, t, noise)
-        predicted_noise = model(visual_obs_batch.to(torch.float32), non_visual_obs_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
-        return F.mse_loss(predicted_noise, noise)
-    
-    @torch.no_grad()
-    def p_sample(self, model, noisy_action, t, t_tensor, visual_obs , non_visual_obs):
-        t=torch.tensor([t])
-        t.to(device)
-        # Predict noise using the model
-
-        predicted_noise = model(visual_obs, non_visual_obs, noisy_action, t_tensor )
-
-      #  print("noisy action shape == " , noisy_action_decoder.shape)
-       # print("predicted noise shape == " , predicted_noise.shape)
-        # Extract coefficients for denoising
-        alpha_t = self.alphas[t.to(device).to(torch.long)]#.view(-1,1, 1)
-       # alpha_t= alpha_t.repeat(10,20,1)
-        #print("alpha t shape == " , alpha_t.shape)
-        alpha_cumprod_t = self.alpha_cumprod[t.to(device).to(torch.long)]#.view(-1, 1)
-        beta_t = self.betas[t.to(device).to(torch.long)]#.view(-1, 1)
-        
-        # Compute mean of reverse process
-        sqrt_alpha_t = torch.sqrt(alpha_t).to(device)
-        sqrt_one_minus_alpha_cumprod_t = torch.sqrt(1.0 - alpha_cumprod_t)
-        
-        # Compute mean
-        pred_mean = (noisy_action - beta_t * predicted_noise / sqrt_one_minus_alpha_cumprod_t) / sqrt_alpha_t
-      #  print("predicted mean shape == " , pred_mean.shape)
-        # Add noise for all timesteps except t=0
-        if t.min() > 0:
-            noise = torch.randn_like(noisy_action)
-            pred_mean = pred_mean + torch.sqrt(beta_t) * noise
-        
-        return pred_mean
-
-    @torch.no_grad()
-    def sample(self, model, shape, visual_obs , non_visual_obs , device, num_random_samples=20):
-        """
-        Generate samples using the reverse diffusion process
-        
-        Starts from pure noise and gradually denoises to generate data
-        
-        Args:
-            model: Trained diffusion model
-            shape: Shape of data to generate (batch_size, 10, 10)
-            condition: Conditioning information
-            device: Device to run on
-        Returns:
-            Generated samples
-        """
-        # Start from pure noise
-        noisy_action_decoder = torch.randn(shape, device=device)
-        if len(visual_obs.shape)==4:
-            visual_obs=visual_obs.unsqueeze(0)  # Add sequence dimension if missing
-        visual_obs=visual_obs.repeat(shape[0],1,1,1,1)  # Repeat condition for batch size
-        non_visual_obs=non_visual_obs.repeat(shape[0],1,1) 
-
-
-        for t in reversed(range(self.timesteps)):
-            # Create timestep tensor
-            t_normalized= float(t) / (self.timesteps - 1)
-           # print("t normalized == " , t_normalized)
-            t_tensor = torch.tensor([t_normalized]).to(device).to(torch.float32)#torch.full((shape[0],), t, device=device, dtype=torch.long)
-            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t,t_tensor, visual_obs , non_visual_obs)
-        return noisy_action_decoder
-
-
 
 
 
@@ -615,7 +696,7 @@ class TrainConfig:
     d_model: int = 256
     n_heads: int = 8
     n_layers: int = 2
-    dropout: float = 0.15
+    dropout: float = 0.1
 
     hist_len: int = 5
     horizon: int = 20
@@ -651,9 +732,10 @@ class QTransformer(nn.Module):
         super().__init__()
         self.hist_len = hist_len
         self.horizon = horizon
-        self.num_tokens = 2 * hist_len + horizon
+        self.num_tokens = 3 * hist_len + horizon
 
-        self.vis_proj = nn.Linear(d_vis, d_model)
+        self.head_depth_proj = nn.Linear(d_vis, d_model)
+        self.arm_depth_proj = nn.Linear(d_vis, d_model)
         self.nonvis_proj = nn.Linear(d_nonvis, d_model)
         self.act_proj = nn.Linear(d_act, d_model)
 
@@ -680,19 +762,17 @@ class QTransformer(nn.Module):
             nn.Linear(int(d_model/4), 1),
         )
 
-    def forward(self, vis_hist: torch.Tensor, nonvis_hist: torch.Tensor, act_seq: torch.Tensor) -> torch.Tensor:
-        B = vis_hist.shape[0]
+    def forward(self, head_depth_hist: torch.Tensor, arm_depth_hist: torch.Tensor , nonvis_hist: torch.Tensor, act_seq: torch.Tensor) -> torch.Tensor:
+        B = head_depth_hist.shape[0]
     #    print("Visual history shape in Q transformer == ", vis_hist.shape)
      #   print("Non visual history shape in Q transformer == ", nonvis_hist.shape)
-        vis_tok = self.vis_proj(vis_hist)
+        head_depth_tok = self.head_depth_proj(head_depth_hist)
+        arm_depth_tok = self.arm_depth_proj(arm_depth_hist)
         nonvis_tok = self.nonvis_proj(nonvis_hist)
-      #  print("Projected visual history shape in Q transformer == ", vis_tok.shape)
-      #  print("Projected non visual history shape in Q transformer == ", nonvis_tok.shape)
 
-        state_tokens = torch.stack([vis_tok, nonvis_tok], dim=2)
-       # print("Stacked state tokens shape in Q transformer == ", state_tokens.shape)
-        state_tokens = state_tokens.view(B, 2 * self.hist_len, -1)
-       # print("Reshaped state tokens shape in Q transformer == ", state_tokens.shape)
+        state_tokens = torch.stack([head_depth_tok, arm_depth_tok, nonvis_tok], dim=2)
+        state_tokens = state_tokens.view(B, 3 * self.hist_len, -1)
+
 
        # print("Action sequence shape in Q transformer == ", act_seq.shape)
         act_tokens = self.act_proj(act_seq)
@@ -877,17 +957,18 @@ def main():
     num_prev_obs=5
     num_predicted_acts=20
 
-    diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load(
-                                            #path.join( current_directory,"check_points/diffusion_model_epoch_2200.pt"),
-                                            path.join( current_directory,"check_points/model_without_action_extension_ep_580.pt"),
-                                            map_location=device))
-    diffusion_policy.to(device)
-    diffusion_policy.eval()
-    for p in diffusion_policy.parameters():
+    flow_matching_policy=ConditionalDiffusionModel()
+    check_point=torch.load(
+                            # path.join( current_directory,"check_points/diffusion_model_epoch_2200.pt"),
+                            path.join( current_directory,"check_points/flow_matching_Cnn_encoder_scratch_without_act_ext_enhanced_sampling_860.pt"),
+                            map_location=device)
+    flow_matching_policy.load_state_dict(check_point['model'])
+    flow_matching_policy.to(device)
+    flow_matching_policy.eval()
+    for p in flow_matching_policy.parameters():
         p.requires_grad_(False)
-    scheduler = NoiseScheduler()
-    print("Loaded Diffusion Policy")
+    scheduler = FlowMatchingScheduler()
+    print("Loaded flow matching Policy")
 
 
     cfg = TrainConfig()
@@ -903,7 +984,7 @@ def main():
         horizon=cfg.horizon,
     ).to(cfg.device)
 
-    q_network_ckpt = torch.load(path.join( current_directory,'check_points/ckpt_with_normalization_and_uncertainty_aware_all_data_step_600.pt'))
+    q_network_ckpt = torch.load(path.join( current_directory,'check_points/ckpt_with_normalization_without_uncertainty_head_arm_depth_no_input_dropout_tidy_house_ep_600.pt'))
     q_value_network.load_state_dict(q_network_ckpt["q_state_dict"])
     q_value_network.to(device)
    # q_value_network.eval()
@@ -968,7 +1049,8 @@ def main():
 
 
         number_of_steps=0
-        visual_obs_buffer=[]
+        head_depth_obs_buffer=[]
+        arm_depth_obs_buffer=[]
         non_visual_obs_buffer=[]
         while True:
 
@@ -1028,13 +1110,12 @@ def main():
             else:
             	grasped=-1
 
-
             pick_goal=   env.env._env._task.pick_goal    
             place_goal=   env.env._env._task.place_goal 
             resting_pos=env.env._env._task.resting_position   
 
-          #  print("current episode == " , env.current_episode)
-          #  print("pick goal == " , pick_goal)
+         #   print("current episode == " , env.current_episode)
+         #   print("pick goal == " , pick_goal)
           #  print("place goal == " , place_goal)
           #  input()
 
@@ -1057,7 +1138,7 @@ def main():
          #   robot_head_rgb = ob['robot_head_rgb']
           #  robot_arm_rgb = ob['robot_arm_rgb']
             robot_head_depth = ob['robot_head_depth']
-           # robot_arm_depth = ob['robot_arm_depth']
+            robot_arm_depth = ob['robot_arm_depth']
 
            # print("robot_head_rgb shape == " , robot_head_rgb.shape)
            # print("robot_arm_rgb shape == " , robot_arm_rgb.shape)
@@ -1087,11 +1168,13 @@ def main():
             relative_place_pos_ee = robot_ee_transform.inverted().transform_point(place_goal)
             relative_resting_position=local_ee_pos_relative_to_base-resting_pos
 
+            #robot_head_depth_features=Feat_ext( torch.from_numpy(robot_head_depth).unsqueeze(0).permute(0,3,1,2).to(device))
+            head_depth_obs_buffer.append(robot_head_depth)
+            arm_depth_obs_buffer.append(robot_arm_depth)
+            head_depth_obs_buffer_np=np.array(head_depth_obs_buffer)
+            arm_depth_obs_buffer_np=np.array(arm_depth_obs_buffer)
 
 
-
-            visual_obs_buffer.append(robot_head_depth)
-            visual_obs_buffer_np=np.array(visual_obs_buffer)
             non_visual_obs_buffer.append( np.concatenate((
                 relative_resting_position,
                 relative_pick_pos_ee,
@@ -1104,12 +1187,15 @@ def main():
             non_visual_obs_buffer_np=np.array(non_visual_obs_buffer)
 
             if number_of_steps==0:
-                visual_obs_buffer_np=np.repeat(visual_obs_buffer_np, num_prev_obs, axis=0)
+                head_depth_obs_buffer_np=np.repeat(head_depth_obs_buffer_np, num_prev_obs, axis=0)
+                arm_depth_obs_buffer_np=np.repeat(arm_depth_obs_buffer_np, num_prev_obs, axis=0)                
                 non_visual_obs_buffer_np=np.repeat(non_visual_obs_buffer_np, num_prev_obs, axis=0)
 
             elif number_of_steps >= num_prev_obs:
-                visual_obs_buffer=visual_obs_buffer[-num_prev_obs: ]
-                visual_obs_buffer_np=visual_obs_buffer_np[-num_prev_obs: , ...]
+                head_depth_obs_buffer=head_depth_obs_buffer[-num_prev_obs: ]
+                head_depth_obs_buffer_np=head_depth_obs_buffer_np[-num_prev_obs: , ...]
+                arm_depth_obs_buffer=arm_depth_obs_buffer[-num_prev_obs: ]
+                arm_depth_obs_buffer_np=arm_depth_obs_buffer_np[-num_prev_obs: , ...]
 
                 non_visual_obs_buffer=non_visual_obs_buffer[-num_prev_obs: ]
                 non_visual_obs_buffer_np=non_visual_obs_buffer_np[-num_prev_obs: , ...]
@@ -1117,14 +1203,18 @@ def main():
 
             if number_of_steps==0 or number_of_steps % 10 ==0:
                 with torch.no_grad():
-                    shape = (10,20,10)
-                    actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
-                  #  actions[:,:,0:2]*=3.0
-                    similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
-                   # if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
-                    best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
-                    best_traj_index_q_values=best_traj_q_value(q_value_network, visual_obs_buffer_np, non_visual_obs_buffer_np, actions)
-                    estimated_action_trajs=actions[best_traj_index]
+                    actions=sample_actions_flow_matching(flow_matching_policy , torch.from_numpy(head_depth_obs_buffer_np).to(device).to(torch.float32),  torch.from_numpy(arm_depth_obs_buffer_np).to(device).to(torch.float32), torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) ,10, device)
+
+                   # actions[:,:,0:2]*=3.0
+
+                  #  similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
+                   # if relative_pick_pos_base_polar[0]<1.5 or relative_place_pos_base_polar[0]<1.5:
+                    #    best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                   # print("input the index")
+                  #  x=input()
+
+                    best_traj_index_q_values=best_traj_q_value(flow_matching_policy,q_value_network, head_depth_obs_buffer_np ,  arm_depth_obs_buffer_np, non_visual_obs_buffer_np, actions)
+                    estimated_action_trajs=actions[best_traj_index_q_values]
 
             action=estimated_action_trajs[number_of_steps%10 ].detach().cpu().numpy()
             action[0:2]=np.clip(action[0:2],-3,3)  # Clip base actions
@@ -1162,7 +1252,7 @@ def main():
 
             if args.viewer and key == "r":
                 done = True
-            if number_of_steps>5000 or success:
+            if number_of_steps>2000 or success:
                 if success:
                     number_of_successful_episodes+=1
                     print("successful episode =")

@@ -1,7 +1,7 @@
 __BASE__: "{fileDirname}/base.yaml"
 
 ENVIRONMENT:
-  MAX_EPISODE_STEPS: 200
+  MAX_EPISODE_STEPS: 20000
 
 TASK:
   TYPE: RearrangePickTask-v0
@@ -55,7 +55,7 @@ TASK:
     TYPE: ForcePenalty
     FORCE_PENALTY: 0.001
     MAX_FORCE_PENALTY: 0.2
-    MAX_ACCUM_FORCE: 5000.0
+    MAX_ACCUM_FORCE: 500000000000.0
     MAX_ACCUM_FORCE_PENALTY: 1.0
   InvalidGrasp:
     TYPE: InvalidGrasp
@@ -65,7 +65,7 @@ TASK:
     END_EPISODE: True
   RearrangePickSuccess:
     TYPE: RearrangePickSuccess
-    THRESHOLD: 0.05
+    THRESHOLD: 0.1
   RearrangePickReward:
     TYPE: RearrangePickReward
     DIST_REWARD: 4.0

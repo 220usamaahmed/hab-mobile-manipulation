@@ -314,8 +314,7 @@ class RearrangeSim(HabitatSim):
           #  print("self.targets[handle] == " , self.targets[handle])
          #   input()
 
-      #  print("self.targets == " , self.targets)
-       # input()
+
 
 
 

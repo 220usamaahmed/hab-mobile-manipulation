@@ -185,6 +185,7 @@ class RearrangeTask(EmbodiedTask):
     def seed(self, seed: int) -> None:
         # NOTE(jigu): Env will set the seed for random and np.random
         # when initializing episode iterator.
+
         self.np_random = np.random.RandomState(seed)
 
     def reset(self, episode: RearrangeEpisode):
@@ -256,7 +257,9 @@ class RearrangeTask(EmbodiedTask):
 
         # The noise can not be too large (e.g. 0.05)
        # ee_noise = self._config.get("EE_NOISE", 0.025)*2
-        ee_noise = self._config.get("EE_NOISE", 0.025)*1.5
+        ee_noise = self._config.get("EE_NOISE", 0.025)
+
+
         if ee_noise > 0:
             noise = self.np_random.normal(0, ee_noise, [3])
             noise = np.clip(noise, -ee_noise * 2, ee_noise * 2)
@@ -332,13 +335,20 @@ class RearrangeTask(EmbodiedTask):
     def _set_target(self, index):
         self.tgt_idx = index
         self.tgt_obj, self.tgt_T = self._sim.get_target(self.tgt_idx)
+
+
         self.tgt_receptacle_info = self._target_receptacles[self.tgt_idx]
 
+
     def _has_target_in_drawer(self):
+
         receptacle_handle, receptacle_link_id = self.tgt_receptacle_info
+
+        
         if receptacle_handle is None:  # for baked scenes
             return False
         if "kitchen_counter" in receptacle_handle and receptacle_link_id != 0:
+
             return True
         else:
             return False

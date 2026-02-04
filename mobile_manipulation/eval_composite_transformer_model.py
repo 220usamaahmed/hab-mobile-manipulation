@@ -190,7 +190,7 @@ def main():
     if Transformer_policy:
         # Typical training checkpoint that already stored config + state_dict
         loader = SkillTransformerPolicyLoader.from_checkpoint(
-            ckpt_path="/home/shokry/skill_transformer/check_points/tidy_house/usama/ckpt.74.pth",
+            ckpt_path="/home/shokry/mobile-manipulation/skill_transformer/check_points/tidy_house/ckpt.22.pth",
             device="cuda",             # or "cpu"
             strict=False,              # be forgiving across minor code/config changes
             strip_prefix="module.",    # remove DDP prefix if present
@@ -232,6 +232,7 @@ def main():
     for i_ep in range(num_episodes):
         ob = env.reset()
         initial_robot_pos = env.env._env._sim.robot.base_pos
+        print("Initial robot position: ", initial_robot_pos)
         #policy.reset(ob)
 
         done = False
@@ -404,6 +405,7 @@ def main():
                 deterministic=True,
                 rtgs=None,
             )
+
             rnn_hidden_states=out['rnn_hidden_states']
         #    print("rnn_hidden_states after in eval comp == ",rnn_hidden_states)
 
@@ -411,7 +413,8 @@ def main():
 
             arm_action= out['actions'][0,:7]
             print("arm action == " , arm_action)
-            base_act= out['actions'][0,7:9]*1.5  ##scale for the navigation
+            base_act= out['actions'][0,7:9]*3 #*1.5  ##scale for the navigation
+            base_act=torch.clip(base_act, min=-3, max=3)
             print("base action == " , base_act)
             prev_gripper_action=torch.tensor([1]) if env.env._env._sim.gripper.is_grasped else torch.tensor([-1]).to(device)
             gripper_action= torch.argmax(out['actions'][0,9:12])
@@ -439,6 +442,8 @@ def main():
             prev_actions[0,10:12]=0.0
             metrics = extract_scalars_from_info(info)
             success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
+
+
 
 
 

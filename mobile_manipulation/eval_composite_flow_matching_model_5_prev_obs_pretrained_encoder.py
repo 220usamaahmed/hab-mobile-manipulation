@@ -71,6 +71,7 @@ import random
 from torch.utils.data import IterableDataset
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 
@@ -333,6 +334,144 @@ def best_traj_q_value(q_value_network, visual_obs, non_visual_obs_buffer, action
 
 
 
+
+
+
+
+
+
+
+
+@torch.no_grad()
+def sample_actions_flow_matching(
+    model,
+    
+    visual_obs: torch.Tensor,
+    non_visual_obs: torch.Tensor,
+    num_predicted_actions: int = 10,
+    device: Optional[torch.device] = None,
+    action_len: int = 20,
+    action_dim: int = 10,
+    num_steps: int = 20,
+    method: str = "heun",
+):
+    """
+    Flow Matching sampler (ODE integration):
+        dx/dt = v_theta(x, t, cond),  t in [0, 1]
+    Start:
+        x(0) ~ N(0, I)
+    Output:
+        x(1)
+    """
+    model.eval()
+    if device is None:
+        device = visual_obs.device
+
+    visual_obs = visual_obs.to(device=device, dtype=torch.float32)
+    non_visual_obs = non_visual_obs.to(device=device, dtype=torch.float32)
+    visual_obs = visual_obs.repeat(num_predicted_actions, 1,1)
+    non_visual_obs = non_visual_obs.repeat(num_predicted_actions, 1,1)
+
+    x = torch.randn((num_predicted_actions, action_len, action_dim), device=device, dtype=torch.float32)
+
+    dt = 1.0 / num_steps
+    for k in range(num_steps):
+        t_k = k * dt
+        t_k_tensor = torch.tensor(t_k, device=device, dtype=torch.float32)
+        t_k_tensor = t_k_tensor.unsqueeze(0)
+
+
+        #t_k_tensor = torch.full((num_predicted_actions,), t_k, device=device, dtype=torch.float32)
+        #print("t k tensor == " , t_k_tensor)
+       # t_k_tensor=t_k_tensor.unsqueeze(-1)
+
+        #print("t_k tensor shape in flow matching sampler == " , t_k_tensor.shape)
+        v_k = model(visual_obs, non_visual_obs, x, t_k_tensor)
+
+        if method.lower() == "euler":
+            x = x + dt * v_k
+        elif method.lower() == "heun":
+            x_pred = x + dt * v_k
+            t_k1 = (k + 1) * dt
+            #t_k1_tensor = torch.full((num_predicted_actions,), t_k1, device=device, dtype=torch.float32)
+            t_k1_tensor = torch.tensor( t_k1, device=device, dtype=torch.float32)
+            t_k1_tensor = t_k1_tensor.unsqueeze(0)
+            v_k1 = model(visual_obs, non_visual_obs, x_pred, t_k1_tensor)
+            x = x + 0.5 * dt * (v_k + v_k1)
+        else:
+            raise ValueError(f"Unknown method: {method}. Use 'euler' or 'heun'.")
+
+    return x
+
+
+
+
+
+class FlowMatchingScheduler:
+    """
+    Rectified Flow / Flow Matching training objective.
+
+    We define a path from noise x0 ~ N(0,I) to data x1 (target actions):
+        x_t = (1 - t) * x0 + t * x1,   where t in [0,1]
+
+    The target velocity field along this path is:
+        v* = d x_t / dt = x1 - x0
+
+    The model is trained to predict v*(x_t, t, cond) via MSE loss.
+    """
+
+    def __init__(self, eps: float = 1e-5):
+        self.eps = eps  # not strictly needed; kept for potential numerical guards
+
+    def sample_xt_and_v(self, x1: torch.Tensor, t: torch.Tensor):
+        """
+        Args:
+            x1: target actions, shape (B, L, D) or (B, D)
+            t: continuous times in [0,1], shape (B,)
+
+        Returns:
+            x_t: interpolated actions at time t, same shape as x1
+            v:   target velocity, same shape as x1
+            x0:  sampled noise start, same shape as x1
+        """
+
+        x0 = torch.randn_like(x1)
+
+        # reshape t for broadcasting over x1
+        while t.dim() < x1.dim():
+            t = t.unsqueeze(-1)
+
+        
+        x_t = (1.0 - t) * x0 + t * x1
+        
+        v = x1 - x0
+
+        
+        return x_t, v, x0
+
+    def get_loss(self, model, x1, t, visual_obs_batch, non_visual_obs_batch):
+        """
+        Model now predicts velocity v at x_t (NOT noise epsilon).
+        Signature matches the original diffusion scheduler for minimal code changes.
+        """
+
+        x_t, v, _ = self.sample_xt_and_v(x1, t)
+        v_pred = model(
+            visual_obs_batch.to(torch.float32),
+            non_visual_obs_batch.to(torch.float32),
+            x_t.to(torch.float32),
+            t.to(torch.float32),
+        )
+        return F.mse_loss(v_pred, v)
+
+
+
+
+
+
+
+
+
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super().__init__()
@@ -534,12 +673,12 @@ class NoiseScheduler:
         return F.mse_loss(predicted_noise, noise)
     
     @torch.no_grad()
-    def p_sample(self, model, noisy_action, t, t_tensor, visual_obs , non_visual_obs):
-        t=torch.tensor([t])
+    def p_sample(self, model, noisy_action, t, visual_obs , non_visual_obs):
+
         t.to(device)
         # Predict noise using the model
 
-        predicted_noise = model(visual_obs, non_visual_obs, noisy_action, t_tensor )
+        predicted_noise = model(visual_obs, non_visual_obs, noisy_action, t )
 
       #  print("noisy action shape == " , noisy_action_decoder.shape)
        # print("predicted noise shape == " , predicted_noise.shape)
@@ -589,10 +728,8 @@ class NoiseScheduler:
 
         for t in reversed(range(self.timesteps)):
             # Create timestep tensor
-            t_normalized= float(t) / (self.timesteps - 1)
-           # print("t normalized == " , t_normalized)
-            t_tensor = torch.tensor([t_normalized]).to(device).to(torch.float32)#torch.full((shape[0],), t, device=device, dtype=torch.long)
-            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t,t_tensor, visual_obs , non_visual_obs)
+            t_tensor = torch.tensor([t]).to(device).to(torch.float32)#torch.full((shape[0],), t, device=device, dtype=torch.long)
+            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t_tensor, visual_obs , non_visual_obs)
         return noisy_action_decoder
 
 
@@ -615,7 +752,7 @@ class TrainConfig:
     d_model: int = 256
     n_heads: int = 8
     n_layers: int = 2
-    dropout: float = 0.15
+    dropout: float = 0.2
 
     hist_len: int = 5
     horizon: int = 20
@@ -877,17 +1014,17 @@ def main():
     num_prev_obs=5
     num_predicted_acts=20
 
-    diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load(
-                                            #path.join( current_directory,"check_points/diffusion_model_epoch_2200.pt"),
-                                            path.join( current_directory,"check_points/model_without_action_extension_ep_580.pt"),
+    flow_matching_policy=ConditionalDiffusionModel()
+    flow_matching_policy.load_state_dict(torch.load(
+                                           # path.join( current_directory,"check_points/diffusion_model_epoch_2200.pt"),
+                                            path.join( current_directory,"check_points/flow_matching_all_tasks_epoch_530.pt"),
                                             map_location=device))
-    diffusion_policy.to(device)
-    diffusion_policy.eval()
-    for p in diffusion_policy.parameters():
+    flow_matching_policy.to(device)
+    flow_matching_policy.eval()
+    for p in flow_matching_policy.parameters():
         p.requires_grad_(False)
-    scheduler = NoiseScheduler()
-    print("Loaded Diffusion Policy")
+    scheduler = FlowMatchingScheduler()
+    print("Loaded flow matching Policy")
 
 
     cfg = TrainConfig()
@@ -1033,8 +1170,8 @@ def main():
             place_goal=   env.env._env._task.place_goal 
             resting_pos=env.env._env._task.resting_position   
 
-          #  print("current episode == " , env.current_episode)
-          #  print("pick goal == " , pick_goal)
+         #   print("current episode == " , env.current_episode)
+         #   print("pick goal == " , pick_goal)
           #  print("place goal == " , place_goal)
           #  input()
 
@@ -1087,10 +1224,11 @@ def main():
             relative_place_pos_ee = robot_ee_transform.inverted().transform_point(place_goal)
             relative_resting_position=local_ee_pos_relative_to_base-resting_pos
 
+            robot_head_depth_features=Feat_ext( torch.from_numpy(robot_head_depth).unsqueeze(0).permute(0,3,1,2).to(device))
+            visual_obs_buffer.append(robot_head_depth_features.squeeze(0).cpu().detach().numpy())
 
 
-
-            visual_obs_buffer.append(robot_head_depth)
+          #  visual_obs_buffer.append(robot_head_depth)
             visual_obs_buffer_np=np.array(visual_obs_buffer)
             non_visual_obs_buffer.append( np.concatenate((
                 relative_resting_position,
@@ -1117,12 +1255,12 @@ def main():
 
             if number_of_steps==0 or number_of_steps % 10 ==0:
                 with torch.no_grad():
-                    shape = (10,20,10)
-                    actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
-                  #  actions[:,:,0:2]*=3.0
+                    actions=sample_actions_flow_matching(flow_matching_policy , torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) ,10, device)
+                    actions[:,:,0:2]*=3.0
+
                     similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
-                   # if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
-                    best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                    if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
+                        best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
                     best_traj_index_q_values=best_traj_q_value(q_value_network, visual_obs_buffer_np, non_visual_obs_buffer_np, actions)
                     estimated_action_trajs=actions[best_traj_index]
 
@@ -1162,7 +1300,7 @@ def main():
 
             if args.viewer and key == "r":
                 done = True
-            if number_of_steps>5000 or success:
+            if number_of_steps>2000 or success:
                 if success:
                     number_of_successful_episodes+=1
                     print("successful episode =")

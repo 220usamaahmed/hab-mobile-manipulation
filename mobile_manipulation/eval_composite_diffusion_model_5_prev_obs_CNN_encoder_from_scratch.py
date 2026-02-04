@@ -317,17 +317,17 @@ def best_traj_q_value(q_value_network, visual_obs, non_visual_obs_buffer, action
     q_values_std_max=torch.max(q_values_std,dim=0)
     q_values_std_min=torch.min(q_values_std,dim=0)
     q_values_std_normalized=(q_values_std - q_values_std_min.values)/(q_values_std_max.values - q_values_std_min.values+1e-8)
-    print("q values concatenated == " , q_values_concatenated)
-    print("q values mean == " , q_values_mean)
-    print("q values std == " , q_values_std)
+  #  print("q values concatenated == " , q_values_concatenated)
+  #  print("q values mean == " , q_values_mean)
+   # print("q values std == " , q_values_std)
     #input()
     weighted_q_values=q_values_means_nomralized * (1-q_values_std_normalized)
-    print("q values means normalized == " , q_values_means_nomralized)
-    print("q values std normalized == " , q_values_std_normalized)
-    print("weighted q values == " , weighted_q_values)
+   # print("q values means normalized == " , q_values_means_nomralized)
+   # print("q values std normalized == " , q_values_std_normalized)
+   # print("weighted q values == " , weighted_q_values)
     best_traj_idx=torch.argmax(weighted_q_values.squeeze(-1))
-    print("best traj index == " , best_traj_idx)
-    print("best q value == " , weighted_q_values[best_traj_idx])
+   # print("best traj index == " , best_traj_idx)
+   # print("best q value == " , weighted_q_values[best_traj_idx])
     return best_traj_idx
     
 
@@ -428,10 +428,13 @@ class ConditionalDiffusionModel(nn.Module):
     def __init__(self, action_dim=10, output_dim=10,sensor_dim=21,depth_features_dim=512, hidden_dim=256, num_layers=2):
         super().__init__()
 
-    #    self.visual_feature_extractor = Feat_ext
         self.action_input_proj = nn.Linear(action_dim , hidden_dim)
-        self.visual_obs_projection= nn.Linear(depth_features_dim, hidden_dim)
+        self.head_depth_projection= nn.Linear(depth_features_dim, hidden_dim)
+        self.arm_depth_projection= nn.Linear(depth_features_dim, hidden_dim)
         self.non_visual_obs_projection= nn.Linear(sensor_dim, hidden_dim)
+
+        self.head_depth_encoder = SimpleCNN(1, (128, 128), depth_features_dim)
+        self.arm_depth_encoder = SimpleCNN(1, (128, 128), depth_features_dim)
 
         self.time_mlp = nn.Sequential(
             SinusoidalPosEmb(hidden_dim),
@@ -446,10 +449,10 @@ class ConditionalDiffusionModel(nn.Module):
         self.output_proj = nn.Linear( hidden_dim,action_dim )
         
         self.decoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Action position embedding
-        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=21)  # Sensor position embedding
+        self.encoder_position_embedding=SinusoidalPositionalEncoding(hidden_dim, max_len=16)  # Sensor position embedding
 
 
-    def forward(self, visual_obs, non_visual_obs, noisy_action, t):
+    def forward(self, head_depth_images, arm_depth_images, non_visual_obs, noisy_action, t):
 
         batch_size=non_visual_obs.shape[0]
         context_length=non_visual_obs.shape[1]
@@ -458,39 +461,43 @@ class ConditionalDiffusionModel(nn.Module):
 
         noisy_action=self.action_input_proj(noisy_action.to(torch.float32))  
 
-       # print("initial visual observation shape == " , visual_obs.shape)
-        if len(visual_obs.shape)==5:
-            visual_obs=visual_obs.permute(0,1,4,2,3) 
-           # arranged_visual_obs=rearrange(visual_obs, 'b s c h w -> (b s) c h w')
 
-            visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
-
-        elif len(visual_obs.shape)==4:
-            visual_obs=visual_obs.permute(0,3,1,2)
-            visual_obs=Feat_ext(visual_obs)
-
-        visual_obs=visual_obs.reshape(batch_size*context_length, -1)  # Reshape to (batch_size * context_length, feature_dim)
+        if len(head_depth_images.shape)==5:
+            head_depth_images=head_depth_images.permute(0,1,4,2,3) 
+            arm_depth_images=arm_depth_images.permute(0,1,4,2,3)
+       #     visual_obs=Feat_ext(rearrange(visual_obs, 'b s c h w -> (b s) c h w'))
+        elif len(head_depth_images.shape)==4:
+            head_depth_images=head_depth_images.permute(0,3,1,2)
+            arm_depth_images=arm_depth_images.permute(0,3,1,2)
+         #   visual_obs=Feat_ext(visual_obs)
 
 
+        head_depth_images=head_depth_images.reshape(batch_size*context_length, head_depth_images.shape[-3], head_depth_images.shape[-2], head_depth_images.shape[-1])
+        arm_depth_images=arm_depth_images.reshape(batch_size*context_length, arm_depth_images.shape[-3], arm_depth_images.shape[-2], arm_depth_images.shape[-1])
+        head_depth_features=self.head_depth_encoder(head_depth_images.to(torch.float32))
+        arm_depth_features=self.arm_depth_encoder(arm_depth_images.to(torch.float32))
+        head_depth_features=head_depth_features.reshape(batch_size, context_length, -1)
+        arm_depth_features=arm_depth_features.reshape(batch_size, context_length, -1)
 
-        visual_obs=self.visual_obs_projection(visual_obs.to(torch.float32))  
-       # print("shape after visual feature projection == " , visual_obs.shape )
-        visual_obs=visual_obs.reshape(batch_size, context_length, -1)  
+
+        head_depth_features=self.head_depth_projection(head_depth_features.to(torch.float32))
+        arm_depth_features=self.arm_depth_projection(arm_depth_features.to(torch.float32))
 
 
-       # print("shape after reshaping back to batch and context length == " , visual_obs.shape )
 
-       # print("initial non visual observations shape == " , non_visual_obs.shape)
         non_visual_obs=self.non_visual_obs_projection(non_visual_obs.to(torch.float32))
-      #  print("shape after reshaping back to batch and context length == " , non_visual_obs.shape )
 
         t=self.time_mlp(t.to(torch.float32))  # Time embedding
         t = t.unsqueeze(1)
         t=t.repeat(batch_size, 1, 1)  # Repeat to match action sequence length
      #   print("t shape after embedding == " , t.shape)
 
-        encoder_input=torch.cat((visual_obs,non_visual_obs,t),dim=1)
-       # print("encoder input shape == " , encoder_input.shape)
+        encoder_input=torch.zeros((batch_size, (context_length*3)+1, non_visual_obs.shape[-1])).to(torch.float32).to(non_visual_obs.device)
+
+        encoder_input[:,0:-2:3,:]=head_depth_features
+        encoder_input[:,1::3,:]=arm_depth_features
+        encoder_input[:,2::3,:]=non_visual_obs
+        encoder_input[:, -1, :]=t.squeeze(1)           # print("encoder input shape == " , encoder_input.shape)
         encoder_input=self.encoder_position_embedding(encoder_input)  # Apply sensor position embedding
 
         decoder_input=torch.cat((t,noisy_action),dim=1)
@@ -505,6 +512,7 @@ class ConditionalDiffusionModel(nn.Module):
         out=out[:,1:,:]
      #   print("final out shape == " , out.shape)
         return out             
+
 
 
 # Noise Scheduler (like DDPM)
@@ -527,19 +535,19 @@ class NoiseScheduler:
         x_new=sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
         return sqrt_alpha_cumprod * x_start + sqrt_one_minus_alpha_cumprod * noise
 
-    def get_loss(self, model, x_start, t, visual_obs_batch , non_visual_obs_batch): 
+    def get_loss(self, model, x_start, t, head_depth_obs, arm_depth_obs , non_visual_obs_batch): 
         noise = torch.randn_like(x_start).to(torch.float32)
         noisy_action = self.q_sample(x_start, t, noise)
-        predicted_noise = model(visual_obs_batch.to(torch.float32), non_visual_obs_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
+        predicted_noise = model(head_depth_obs.to(torch.float32), arm_depth_obs.to(torch.float32), non_visual_obs_batch.to(torch.float32), noisy_action.to(torch.float32), t.to(torch.float32))
         return F.mse_loss(predicted_noise, noise)
     
     @torch.no_grad()
-    def p_sample(self, model, noisy_action, t, t_tensor, visual_obs , non_visual_obs):
-        t=torch.tensor([t])
+    def p_sample(self, model, noisy_action, t, head_depth_obs, arm_depth_obs , non_visual_obs):
+
         t.to(device)
         # Predict noise using the model
 
-        predicted_noise = model(visual_obs, non_visual_obs, noisy_action, t_tensor )
+        predicted_noise = model(head_depth_obs, arm_depth_obs, non_visual_obs, noisy_action, t )
 
       #  print("noisy action shape == " , noisy_action_decoder.shape)
        # print("predicted noise shape == " , predicted_noise.shape)
@@ -565,7 +573,7 @@ class NoiseScheduler:
         return pred_mean
 
     @torch.no_grad()
-    def sample(self, model, shape, visual_obs , non_visual_obs , device, num_random_samples=20):
+    def sample(self, model, shape, head_depth_obs, arm_depth_obs , non_visual_obs , device, num_random_samples=20):
         """
         Generate samples using the reverse diffusion process
         
@@ -581,21 +589,18 @@ class NoiseScheduler:
         """
         # Start from pure noise
         noisy_action_decoder = torch.randn(shape, device=device)
-        if len(visual_obs.shape)==4:
-            visual_obs=visual_obs.unsqueeze(0)  # Add sequence dimension if missing
-        visual_obs=visual_obs.repeat(shape[0],1,1,1,1)  # Repeat condition for batch size
+       # if len(visual_obs.shape)==4:
+        #    visual_obs=visual_obs.unsqueeze(0)  # Add sequence dimension if missing
+        head_depth_obs=head_depth_obs.repeat(shape[0],1,1,1,1)  # Repeat condition for batch size
+        arm_depth_obs=arm_depth_obs.repeat(shape[0],1,1,1,1)
         non_visual_obs=non_visual_obs.repeat(shape[0],1,1) 
 
 
         for t in reversed(range(self.timesteps)):
             # Create timestep tensor
-            t_normalized= float(t) / (self.timesteps - 1)
-           # print("t normalized == " , t_normalized)
-            t_tensor = torch.tensor([t_normalized]).to(device).to(torch.float32)#torch.full((shape[0],), t, device=device, dtype=torch.long)
-            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t,t_tensor, visual_obs , non_visual_obs)
+            t_tensor = torch.tensor([t]).to(device).to(torch.float32)#torch.full((shape[0],), t, device=device, dtype=torch.long)
+            noisy_action_decoder = self.p_sample(model,  noisy_action_decoder, t_tensor, head_depth_obs, arm_depth_obs , non_visual_obs)
         return noisy_action_decoder
-
-
 
 
 
@@ -878,10 +883,11 @@ def main():
     num_predicted_acts=20
 
     diffusion_policy=ConditionalDiffusionModel()
-    diffusion_policy.load_state_dict(torch.load(
-                                            #path.join( current_directory,"check_points/diffusion_model_epoch_2200.pt"),
-                                            path.join( current_directory,"check_points/model_without_action_extension_ep_580.pt"),
-                                            map_location=device))
+    check_point=torch.load(
+                            #path.join( current_directory,"check_points/diffusion_model_epoch_2200.pt"),
+                            path.join( current_directory,"check_points/diffusion_Cnn_encoder_scratch_without_act_ext_enhanced_sampling_1900.pt"),
+                            map_location=device)
+    diffusion_policy.load_state_dict(check_point['model'])
     diffusion_policy.to(device)
     diffusion_policy.eval()
     for p in diffusion_policy.parameters():
@@ -903,7 +909,7 @@ def main():
         horizon=cfg.horizon,
     ).to(cfg.device)
 
-    q_network_ckpt = torch.load(path.join( current_directory,'check_points/ckpt_with_normalization_and_uncertainty_aware_all_data_step_600.pt'))
+    q_network_ckpt = torch.load(path.join( current_directory,'check_points/ckpt_with_normalization_and_uncertainty_aware_all_data_step_1000.pt'))
     q_value_network.load_state_dict(q_network_ckpt["q_state_dict"])
     q_value_network.to(device)
    # q_value_network.eval()
@@ -969,6 +975,8 @@ def main():
 
         number_of_steps=0
         visual_obs_buffer=[]
+        head_depth_obs_buffer=[]
+        arm_depth_obs_buffer=[]
         non_visual_obs_buffer=[]
         while True:
 
@@ -1057,7 +1065,7 @@ def main():
          #   robot_head_rgb = ob['robot_head_rgb']
           #  robot_arm_rgb = ob['robot_arm_rgb']
             robot_head_depth = ob['robot_head_depth']
-           # robot_arm_depth = ob['robot_arm_depth']
+            robot_arm_depth = ob['robot_arm_depth']
 
            # print("robot_head_rgb shape == " , robot_head_rgb.shape)
            # print("robot_arm_rgb shape == " , robot_arm_rgb.shape)
@@ -1092,6 +1100,10 @@ def main():
 
             visual_obs_buffer.append(robot_head_depth)
             visual_obs_buffer_np=np.array(visual_obs_buffer)
+            head_depth_obs_buffer.append(robot_head_depth)
+            arm_depth_obs_buffer.append(robot_arm_depth)
+            head_depth_obs_buffer_np=np.array(head_depth_obs_buffer)
+            arm_depth_obs_buffer_np=np.array(arm_depth_obs_buffer)
             non_visual_obs_buffer.append( np.concatenate((
                 relative_resting_position,
                 relative_pick_pos_ee,
@@ -1105,11 +1117,17 @@ def main():
 
             if number_of_steps==0:
                 visual_obs_buffer_np=np.repeat(visual_obs_buffer_np, num_prev_obs, axis=0)
+                head_depth_obs_buffer_np=np.repeat(head_depth_obs_buffer_np, num_prev_obs, axis=0)
+                arm_depth_obs_buffer_np=np.repeat(arm_depth_obs_buffer_np, num_prev_obs, axis=0)
                 non_visual_obs_buffer_np=np.repeat(non_visual_obs_buffer_np, num_prev_obs, axis=0)
 
             elif number_of_steps >= num_prev_obs:
                 visual_obs_buffer=visual_obs_buffer[-num_prev_obs: ]
                 visual_obs_buffer_np=visual_obs_buffer_np[-num_prev_obs: , ...]
+                head_depth_obs_buffer=head_depth_obs_buffer[-num_prev_obs: ]
+                head_depth_obs_buffer_np=head_depth_obs_buffer_np[-num_prev_obs: , ...]
+                arm_depth_obs_buffer=arm_depth_obs_buffer[-num_prev_obs: ]
+                arm_depth_obs_buffer_np=arm_depth_obs_buffer_np[-num_prev_obs: , ...]
 
                 non_visual_obs_buffer=non_visual_obs_buffer[-num_prev_obs: ]
                 non_visual_obs_buffer_np=non_visual_obs_buffer_np[-num_prev_obs: , ...]
@@ -1118,11 +1136,11 @@ def main():
             if number_of_steps==0 or number_of_steps % 10 ==0:
                 with torch.no_grad():
                     shape = (10,20,10)
-                    actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(visual_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
+                    actions=scheduler.sample(diffusion_policy, shape, torch.from_numpy(head_depth_obs_buffer_np).to(device).to(torch.float32),torch.from_numpy(arm_depth_obs_buffer_np).to(device).to(torch.float32) , torch.from_numpy(non_visual_obs_buffer_np).to(device).to(torch.float32) , device, num_random_samples=20)
                   #  actions[:,:,0:2]*=3.0
                     similarity_vector , best_traj_index = cosine_similarity_matrix_torch(actions)
-                   # if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
-                    best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
+                    if relative_pick_pos_base_polar[0]<1 or relative_place_pos_base_polar[0]<1:
+                        best_traj_index,gripped=imagine_trajectories(env , actions,gripper_is_grasped,similarity_vector, render=True, viewer=viewer)
                     best_traj_index_q_values=best_traj_q_value(q_value_network, visual_obs_buffer_np, non_visual_obs_buffer_np, actions)
                     estimated_action_trajs=actions[best_traj_index]
 

@@ -38,7 +38,15 @@ class RearrangePlaceTask(RearrangePickTask):
         # ---------------------------------------------------------------------------- #
         # Sample a collision-free start state
         # ---------------------------------------------------------------------------- #
-      #  tgt_indices=[1]
+        
+        
+        
+        
+        tgt_indices=[0]
+      
+      
+      
+      
 #        input()
         for tgt_idx in tgt_indices:
             self.target_index=tgt_idx

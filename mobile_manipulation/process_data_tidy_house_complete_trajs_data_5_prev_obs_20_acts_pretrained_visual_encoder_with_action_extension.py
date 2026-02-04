@@ -100,11 +100,11 @@ class SimpleCNN(nn.ModuleList):
 
 
 
-skill='place_task'
+skill='pick'
 
 
 #directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/complete_rearrange_trajs'
-directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/seed_100'
+directory='/home/shokry/hab-mobile-manipulation/collected_data_diffusion/tidy_house/more_data'
 
 Feat_ext = SimpleCNN(1, (128, 128), 512).to(device).to(torch.float32)
 Feat_ext.load_state_dict(torch.load( os.path.join(directory, 'visual_encoder.pth'),
@@ -142,6 +142,7 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
     done=[]
 
     number_of_steps=len(episode_data['action_to_save'])
+
     visual_features=torch.zeros( (number_of_steps, 512), dtype=torch.float32).to(device)
     for i in range(number_of_steps):
         visual_features[i]=Feat_ext( torch.from_numpy( episode_data['robot_head_depth'][i].astype(np.float32) ).unsqueeze(0).permute(0,3,1,2).to(device))
@@ -150,19 +151,24 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
 
 
     last_action=episode_data['action_to_save'][-1]
-  #  print("last_action == " , last_action.shape)
+
+    last_action[0:-1]=np.zeros(9)
+
     last_action_repeated=np.array([last_action for _ in range(num_predicted_actions)])
    # print("last_action_repeated shape == " , last_action_repeated.shape)
     episode_data['action_to_save']=np.concatenate( (episode_data['action_to_save'], last_action_repeated), axis=0)
     #print("New action_to_save shape == " , episode_data['action_to_save'].shape)
-    for step in range(number_of_steps-num_prev_obs-num_predicted_actions):
+    for step in range(number_of_steps-num_prev_obs+1 -10):
 
         vis_obs_step=[]
         next_vis_obs_step=[]
         if step==0:
             for obs_idx in range(step,step+num_prev_obs):
                 vis_obs_step.append(visual_features[0])
-                next_vis_obs_step.append(visual_features[obs_idx+15])
+                if obs_idx+15 > number_of_steps-1:
+                    next_vis_obs_step.append(visual_features[-1])
+                else:
+                    next_vis_obs_step.append(visual_features[obs_idx+15])
            # print("vis_obs_step shape at step 0 == " , np.array(vis_obs_step).shape)
             visual_obs.append(np.array(vis_obs_step))
             next_visual_obs.append(np.array(next_vis_obs_step))
@@ -171,7 +177,10 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
 
         for obs_idx in range(step,step+num_prev_obs):
             vis_obs_step.append(visual_features[obs_idx])
-            next_vis_obs_step.append(visual_features[obs_idx+20])
+            if obs_idx+20-1 > number_of_steps-1:
+                next_vis_obs_step.append(visual_features[-1])
+            else:
+                next_vis_obs_step.append(visual_features[obs_idx+20-1])
         visual_obs.append(np.array(vis_obs_step))
         next_visual_obs.append(np.array(next_vis_obs_step))
 
@@ -189,15 +198,28 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
                     episode_data['rob_qpos'][0],
                     np.array([int(episode_data['is_holding'][0])]),
                 ),axis=-1) )
-                next_non_vis_obs_step.append( np.concatenate((
-                    episode_data['rel_resting_pos'][obs_idx+15],
-                    episode_data['rel_pick_pos_ee'][obs_idx+15],
-                    episode_data['rel_place_pos_ee'][obs_idx+15],
-                    episode_data['rel_pick_pos_base_polar'][obs_idx+15],
-                    episode_data['rel_place_pos_base_polar'][obs_idx+15],
-                    episode_data['rob_qpos'][obs_idx+15],
-                    np.array([int(episode_data['is_holding'][obs_idx+15])]),
+                
+                if obs_idx+15 > number_of_steps-1:
+                    next_non_vis_obs_step.append( np.concatenate((
+                    episode_data['rel_resting_pos'][-1],
+                    episode_data['rel_pick_pos_ee'][-1],
+                    episode_data['rel_place_pos_ee'][-1],
+                    episode_data['rel_pick_pos_base_polar'][-1],
+                    episode_data['rel_place_pos_base_polar'][-1],
+                    episode_data['rob_qpos'][-1],
+                    np.array([int(episode_data['is_holding'][-1])]),
                 ),axis=-1) )
+                
+                else:
+                    next_non_vis_obs_step.append( np.concatenate((
+                        episode_data['rel_resting_pos'][obs_idx+15],
+                        episode_data['rel_pick_pos_ee'][obs_idx+15],
+                        episode_data['rel_place_pos_ee'][obs_idx+15],
+                        episode_data['rel_pick_pos_base_polar'][obs_idx+15],
+                        episode_data['rel_place_pos_base_polar'][obs_idx+15],
+                        episode_data['rob_qpos'][obs_idx+15],
+                        np.array([int(episode_data['is_holding'][obs_idx+15])]),
+                    ),axis=-1) )
 
 
           #  print("non_vis_obs_step shape at step 0 == " , np.array(non_vis_obs_step).shape)
@@ -218,34 +240,34 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
                 episode_data['rob_qpos'][obs_idx],
                 np.array([int(episode_data['is_holding'][obs_idx])]),
             ),axis=-1) )
-            next_non_vis_obs_step.append( np.concatenate((
-                episode_data['rel_resting_pos'][obs_idx+20],
-                episode_data['rel_pick_pos_ee'][obs_idx+20],
-                episode_data['rel_place_pos_ee'][obs_idx+20],
-                episode_data['rel_pick_pos_base_polar'][obs_idx+20],
-                episode_data['rel_place_pos_base_polar'][obs_idx+20],
-                episode_data['rob_qpos'][obs_idx+20],
-                np.array([int(episode_data['is_holding'][obs_idx+20])]),
+            
+            if obs_idx+20-1 > number_of_steps-1:
+                next_non_vis_obs_step.append( np.concatenate((
+                episode_data['rel_resting_pos'][-1],
+                episode_data['rel_pick_pos_ee'][-1],
+                episode_data['rel_place_pos_ee'][-1],
+                episode_data['rel_pick_pos_base_polar'][-1],
+                episode_data['rel_place_pos_base_polar'][-1],
+                episode_data['rob_qpos'][-1],
+                np.array([int(episode_data['is_holding'][-1])]),
             ),axis=-1) )
+            else:  
+                next_non_vis_obs_step.append( np.concatenate((
+                    episode_data['rel_resting_pos'][obs_idx+20-1],
+                    episode_data['rel_pick_pos_ee'][obs_idx+20-1],
+                    episode_data['rel_place_pos_ee'][obs_idx+20-1],
+                    episode_data['rel_pick_pos_base_polar'][obs_idx+20-1],
+                    episode_data['rel_place_pos_base_polar'][obs_idx+20-1],
+                    episode_data['rob_qpos'][obs_idx+20-1],
+                    np.array([int(episode_data['is_holding'][obs_idx+20-1])]),
+                ),axis=-1) )
         non_visual_obs.append(np.array(non_vis_obs_step))
         next_non_visual_obs.append(np.array(next_non_vis_obs_step))
 
 
 
 
-        if step==0:
-            rewards.append(np.array([0]))
-            done.append(np.array([0]))
-        if step == number_of_steps - num_prev_obs -num_predicted_actions - 1:
-            if skill=='place':
-                rewards.append(np.array([sparse_reward]))
-            else:
-                rewards.append(np.array([0]))
-            done.append(np.array([1]))
-        else:
-            rewards.append(np.array([0]))
-            done.append(np.array([0]))
-
+#### modify the action part
 
         action_step=[]
 
@@ -256,12 +278,24 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
             actions.append(np.array(action_step))
             action_step=[]
 
-        for act_idx in range(step+num_prev_obs,step+num_prev_obs+num_predicted_actions):
+        for act_idx in range(step+num_prev_obs-1,step+num_prev_obs+num_predicted_actions-1):
     #        print("action == " , episode_data['action_to_save'][act_idx])
             action_step.append(episode_data['action_to_save'][act_idx])
         actions.append(np.array(action_step))
 
 
+        if step==0:
+            rewards.append(np.array([0]))
+            done.append(np.array([0]))
+        if step == number_of_steps - num_prev_obs - 1:
+            if skill=='place':
+                rewards.append(np.array([sparse_reward]))
+            else:
+                rewards.append(np.array([0]))
+            done.append(np.array([1]))
+        else:
+            rewards.append(np.array([0]))
+            done.append(np.array([0]))
 
 
         ### for the placing task
@@ -284,6 +318,7 @@ def process_episode_data(episode_data,num_prev_obs,num_predicted_actions):
 
   #  print("actions shape == " , np.array(actions).shape)
    # input()
+
     return np.array(visual_obs), np.array(non_visual_obs), np.array(actions) , np.array(rewards), np.array(next_visual_obs), np.array(next_non_visual_obs), np.array(done)
 
 
@@ -294,7 +329,7 @@ def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_a
 
     required_skill=skill
     skill_files=[]
-    if required_skill!='nav_to_pick' and required_skill!='nav_to_place'and required_skill!='pick_task' and required_skill!='place_task':
+    if required_skill!='nav' and required_skill!='pick' and required_skill!='place':
         print("please set a valid skill among nav, pick, place")
         input()
 
@@ -327,6 +362,13 @@ def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_a
         for episode_key in data.keys():
             episode_data=data[episode_key]
             visual_obs_data,non_visual_obs_data,action_data,rewards,next_visual_obs_data,next_non_visual_obs_data,done=process_episode_data(episode_data,num_prev_obs,num_predicted_actions)
+            if visual_obs_data.shape[0] == non_visual_obs_data.shape[0] == action_data.shape[0] == rewards.shape[0] == next_visual_obs_data.shape[0] == next_non_visual_obs_data.shape[0] == done.shape[0] :
+                #print("Processed data have equal number of samples !!! ")
+                pass
+                
+            else:
+                print("error in processing episode {} in file {}".format(episode_key,file_name))
+                input()
             if visual_obs_data.shape[0]==0:
                 print("Skipping episode ", episode_key , " due to zero valid steps after processing.")
                 continue
@@ -366,25 +408,20 @@ def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_a
             print("next_visual_obs_data_all_episodes shape == " , next_visual_obs_data_all_episodes.shape)
             print("next_non_visual_obs_data_all_episodes shape == " , next_non_visual_obs_data_all_episodes.shape)
             print("done_data_all_episodes shape == " , done_data_all_episodes.shape)
-
-
-
-
+            
             if visual_obs_data_all_episodes.shape[0] == non_visual_obs_data_all_episodes.shape[0] == action_data_all_episodes.shape[0] == rewards_data_all_episodes.shape[0] == next_visual_obs_data_all_episodes.shape[0] == next_non_visual_obs_data_all_episodes.shape[0] == done_data_all_episodes.shape[0] :
                 print("All saved tensors have the same number of samples")
             else:
                 print("Saved data has incorrect dimension")
                 input()
 
-
-
-            torch.save(visual_obs_data_all_episodes, os.path.join(save_directory, 'visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
-            torch.save(non_visual_obs_data_all_episodes, os.path.join(save_directory, 'non_visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
-            torch.save(action_data_all_episodes, os.path.join(save_directory, 'action_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
-            torch.save(rewards_data_all_episodes, os.path.join(save_directory, 'rewards_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
-            torch.save(next_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
-            torch.save(next_non_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_non_visual_obs_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
-            torch.save(done_data_all_episodes, os.path.join(save_directory, 'done_data_{}_task_p_{}.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(visual_obs_data_all_episodes, os.path.join(save_directory, 'visual_obs_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(non_visual_obs_data_all_episodes, os.path.join(save_directory, 'non_visual_obs_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(action_data_all_episodes, os.path.join(save_directory, 'action_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(rewards_data_all_episodes, os.path.join(save_directory, 'rewards_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(next_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_visual_obs_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(next_non_visual_obs_data_all_episodes, os.path.join(save_directory, 'next_non_visual_obs_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
+            torch.save(done_data_all_episodes, os.path.join(save_directory, 'done_data_{}_task_p_{}_with_half_action_extension.pt'.format(skill,number_of_saved_parts)) )
             print("finished saving processed data part number {} to disk.".format(number_of_saved_parts) )
 
             file_visual_obs=[]
@@ -425,7 +462,7 @@ def process_data(upload_directory,save_directory,num_prev_obs=5, num_predicted_a
 #upload_directory='/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/accurate_data_5_aug/all_tasks_corrected_grasped_obs_26_aug'
 upload_directory=directory
 
-save_directory=directory+'/processed_data_without_action_extension'
+save_directory=directory+'/processed_data_with_action_extension'
 #save_directory='/home/shokry/hab-mobile-manipulation/diffusion_dataset_new/accurate_data_5_aug/all_tasks_corrected_grasped_obs_26_aug/weights_diff_transformer'
 
 process_data(upload_directory,save_directory)

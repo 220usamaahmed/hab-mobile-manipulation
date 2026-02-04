@@ -36,7 +36,7 @@ SOLUTION:
 
   ResetArm:
     TYPE: ResetArm
-    TIMEOUT: 50
+    TIMEOUT: 500
 
   NextTarget:
     TYPE: NextTarget

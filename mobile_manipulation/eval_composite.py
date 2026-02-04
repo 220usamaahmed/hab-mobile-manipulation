@@ -179,8 +179,8 @@ def main():
     env = RearrangeRLEnv(config)
     env = HabitatActionWrapperV1(env)
     env.seed(config.TASK_CONFIG.SEED)
-    print("obs space", env.observation_space)
-    print("action space", env.action_space)
+  #  print("obs space", env.observation_space)
+   # print("action space", env.action_space)
 
     # -------------------------------------------------------------------------- #
     # Initialize policy
@@ -210,9 +210,22 @@ def main():
 
     number_of_episodes=0
     for i_ep in range(num_episodes):
-        print("episode number == " , env.current_episode.episode_id)
+     #   print("episode number == " , env.current_episode.episode_id)
         ob = env.reset()
         initial_robot_pos = env.env._env._sim.robot.base_pos
+      #  print("episode == " , env.current_episode)
+       # input()
+
+
+
+       # print("initial robot pos == " , initial_robot_pos)
+      #  print("current episode == " , env.current_episode)
+       # print("pick goal == " , env.env._env._task.pick_goal )
+       # print("place goal == " , env.env._env._task.place_goal ) 
+       # input()
+
+
+
         policy.reset(ob)
 
         episode_reward = 0.0
@@ -240,6 +253,7 @@ def main():
 
         number_of_steps=0
         while True:
+            
             step_action = policy.act(ob)
             if step_action is None:
                 print("Terminate the episode given none action")
@@ -342,9 +356,11 @@ def main():
                 current_task_name = "nav"
             elif current_task_name == "OpenDrawerRLSkill":
                 current_task_name = "open_cab"
+            elif current_task_name == "OpenFridgeRLSkill":
+                current_task_name = "open_fridge"
             elif current_task_name == "ResetArm":
                 current_task_name = "reset_arm"
-            elif current_task_name == "PickDrRLSkill":
+            elif current_task_name == "PickDrRLSkill" or current_task_name == "PickFrRLSkill":
                 current_task_name = "pick_offset"
             elif current_task_name == "PlaceRLSkill":
                 current_task_name = "place"
@@ -373,6 +389,7 @@ def main():
             current_step_obs_transformer=dict()
             current_step_info_transformer=dict()
             current_step_obs_transformer['robot_head_depth']=robot_head_depth
+            current_step_obs_transformer['robot_arm_depth']=robot_arm_depth
 
             current_step_obs_transformer['relative_resting_position']=torch.tensor(local_ee_pos_relative_to_base-resting_pos)
          #   print("rel resting pos == " , local_ee_pos_relative_to_base-resting_pos)
@@ -472,17 +489,15 @@ def main():
               #  print("current task == " , current_task_name)
 
 
-
-
-
-
-
-
-
-
-
+        #    print("obs keys == " , ob.keys())
+         #   print("step action == " , step_action)
             ob, reward, done, info = env.step(step_action)
             episode_reward += reward
+
+
+
+
+
 
             obs_ep_transformer.append(current_step_obs_transformer)
             rewards_ep_transformer.append(torch.tensor(reward).unsqueeze(0))
@@ -495,6 +510,7 @@ def main():
             if args.viewer and key == "r":
                 done = True
             if done:
+
                 break
 
             '''
@@ -543,7 +559,9 @@ def main():
 
         success = metrics.get(config.RL.SUCCESS_MEASURE, -1)
         is_failure = success == False
-        print("success == " , success)
+        if success:
+            print("success == " , success)
+        #    input()
         if success:
             current_episode_dict=dict()
             current_episode_dict["obs"]=obs_ep_transformer
@@ -551,7 +569,7 @@ def main():
             current_episode_dict["rewards"]=rewards_ep_transformer
             current_episode_dict["masks"]=masks_ep_transformer
             current_episode_dict["infos"]=infos_ep_transformer
-            torch.save(current_episode_dict ,  f"/home/shokry/mobile-manipulation/hab-mobile-manipulation/collected_trajectories/tidy_house/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
+            torch.save(current_episode_dict ,  f"/home/shokry/mobile-manipulation/hab-mobile-manipulation/collected_trajectories/tidy_house/seed_100/successful_episode_{episode_id}_scene_{scene_id}_traj_num_{number_of_episodes}.pt" )
         #    input()
         if args.save_video == "all" or (
             args.save_video == "failure" and is_failure
@@ -577,6 +595,8 @@ def main():
 
         number_of_episodes+=1
 
+
+
     env.close()
 
     # logging metrics
@@ -590,6 +610,13 @@ def main():
     failure_episodes = sorted(failure_episodes)
     failure_episodes_str = ",".join(map(str, failure_episodes))
     logger.info("Failure episodes:\n{}".format(failure_episodes_str))
+
+
+
+    torch.save(failure_episodes, osp.join('/home/shokry/mobile-manipulation/hab-mobile-manipulation/collected_trajectories/tidy_house/seed_100', "failure_episodes.pt"))
+
+
+
 
     if args.save_log:
         json_path = config.LOG_FILE.replace("log.txt", "result.json")

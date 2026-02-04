@@ -1,7 +1,7 @@
 __BASE__: "{fileDirname}/../base.yaml"
 
 DATASET:
-  DATA_PATH: "data/datasets/rearrange/v3/tidy_house_220417_{split}.json.gz"
+  DATA_PATH: "data/datasets/rearrange/v3/tidy_house_220417_train.json.gz"
   #DATA_PATH: "data/datasets/rearrange/v1/minival/rearrange.json.gz"
 
 ENVIRONMENT:

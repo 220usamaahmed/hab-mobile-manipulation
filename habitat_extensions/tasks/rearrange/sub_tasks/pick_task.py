@@ -103,9 +103,10 @@ class RearrangePickTask(RearrangeTask):
         # ---------------------------------------------------------------------------- #
 
 
-      #  tgt_indices=[1]
+        tgt_indices=[0]
 
 
+#self.pick_goal ==  [0.59639 0.65406 6.14573]
 
 
 
@@ -117,6 +118,7 @@ class RearrangePickTask(RearrangeTask):
             self.pick_goal = np.array(
                 self.tgt_obj.translation, dtype=np.float32
             )
+
             self.pick_goal_T=np.array(self.tgt_obj.transformation , dtype=np.float32 )
           #  print("pick goal for index " , tgt_idx , " == ", self.pick_goal_T)
             self.place_goal=self._sim.targets['{}'.format(keys[tgt_idx])].translation
@@ -226,6 +228,7 @@ class RearrangePickTask(RearrangeTask):
             offset = mn.Vector3(1.0, 0, 0)
             self.init_start_pos = np.array(T.transform_point(offset))
         elif self._has_target_in_drawer():
+
             self.tgt_receptacle = art_obj_mgr.get_object_by_handle(
                 receptacle_handle
             )
@@ -258,6 +261,7 @@ class RearrangePickTask(RearrangeTask):
             self.pick_goal2 = np.array(
                 self.tgt_obj.translation, dtype=np.float32
             )
+
 
             # Generate some noise for obj in the drawer
             obj_init_noise = self._config.get("OBJ_INIT_NOISE", 0.0)

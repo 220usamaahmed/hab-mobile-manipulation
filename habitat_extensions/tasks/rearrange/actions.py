@@ -311,10 +311,11 @@ class BaseVelAction(AtomicAction):
             - Stop when velocity is small
             - Revert robot pose if it collides with other objects.
         """
+       
         lin_vel, ang_vel = self.preprocess_velocity(velocity)
-       # lin_vel, ang_vel=velocity
-      #  print("in base velocity action step")
-       # print("action == " , lin_vel, ang_vel)
+        #lin_vel, ang_vel=velocity
+       # print("in base velocity action step")
+        #print("action == " , lin_vel, ang_vel)
        # input()
         # x-axis is forward and y-axis is up.
         self.vel_ctrl.linear_velocity = mn.Vector3(lin_vel, 0, 0)

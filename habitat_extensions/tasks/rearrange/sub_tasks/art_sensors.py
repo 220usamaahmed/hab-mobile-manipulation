@@ -352,6 +352,7 @@ class RearrangeSetMarkerRewardV1(RearrangeSetMarkerReward):
 
         if gripper_status == GripperStatus.PICK_WRONG:
             reward -= self._config.PICK_PENALTY
+            
             if self._config.END_PICK_WRONG:
                 task._is_episode_active = False
                 task._is_episode_truncated = self._config.get(
@@ -378,7 +379,15 @@ class RearrangeSetMarkerRewardV1(RearrangeSetMarkerReward):
             self.prev_dist_to_goal2 = marker_to_goal_dist
 
         if gripper_status == GripperStatus.HOLDING_WRONG:
-            raise RuntimeError
+            print("GripperStatus.HOLDING_WRONG == " ,GripperStatus.HOLDING_WRONG)
+            input()
+            if self._config.END_PICK_WRONG:
+                task._is_episode_active = False
+                task._is_episode_truncated = self._config.get(
+                    "TRUNCATE_PICK_WRONG", False
+                )
+
+            #raise RuntimeError
 
         if gripper_status == GripperStatus.DROP:
             if set_marker_success:
